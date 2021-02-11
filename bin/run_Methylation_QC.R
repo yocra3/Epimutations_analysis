@@ -76,10 +76,10 @@ while (nrow(outlier)> 0){
   outs <- rbind(outs, outlier)
   round <- round + 1
   qc.objects <- meffil.remove.samples(qc.objects, outlier$sample.name)
-  save(qc.objects, file = paste0(outPrefix,"qc.objects.round", round, ".Rdata"))
+  save(qc.objects, file = paste0(outPrefix,".qc.objects.round", round, ".Rdata"))
   
   qc.summary <- meffil.qc.summary(qc.objects, parameters = qc.parameters)
-  save(qc.summary, file = paste0(outPrefix, "qcsummary.round", round, ".Rdata"))
+  save(qc.summary, file = paste0(outPrefix, ".qcsummary.round", round, ".Rdata"))
   outlier <- qc.summary$bad.samples
 }
 save(qc.objects, file = paste0(outPrefix, ".qc.objects.clean.Rdata"))
