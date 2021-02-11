@@ -14,13 +14,13 @@ phenoPath <- "results/preprocess/phenotypes/INMA_phenotypes.Rdata" ## Path to Rd
 genosPath <- "results/preprocess/methylation/INMA.methSNPs.raw"
 
 ## Output name
-outPrefix <- "MeDALL"
+outPrefix <- "MeDALL_SAB0"
 
 ## Discard samples for the project
 discardSamples <- function(samplesheet){
   samplesheet <- samplesheet[grep("^04_", samplesheet$Sample_Name),]
   samplesheet <- subset(samplesheet, Sample_Group == "Age_0")
-  
+  samplesheet
 }
 
 ## Create common sample ID between IDATs and phenotypes

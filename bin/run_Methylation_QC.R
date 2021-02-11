@@ -16,7 +16,6 @@ configFile <- args[1]
 ## Load libraries ####
 library(meffil)
 library(minfi)
-library(readxl)
 library(ggplot2)
 library(dplyr)
 library(stringr)
@@ -103,7 +102,6 @@ norm.objects <- meffil.normalize.quantiles(qc.objects, number.pcs = pcs)
 save(norm.objects, file = paste0(outPrefix, ".norm.obj.pc.Rdata"))
 
 norm.beta <- meffil.normalize.samples(norm.objects, cpglist.remove = qc.summary$bad.cpgs$name, verbose = TRUE)
-save(norm.beta, file = paste0(outPrefix, ".norm.beta.Rdata"))
 
 ## Check covariables
 beta.pcs <- meffil.methylation.pcs(norm.beta, probe.range = 40000)

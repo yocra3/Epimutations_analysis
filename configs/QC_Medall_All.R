@@ -18,7 +18,7 @@ outPrefix <- "MeDALL_all"
 
 ## Discard samples for the project
 discardSamples <- function(samplesheet){
-  samplesheet 
+  samplesheet <- samplesheet[!grepl("H2O", samplesheet$Sample_Name), ]
 }
 
 ## Create common sample ID between IDATs and phenotypes
