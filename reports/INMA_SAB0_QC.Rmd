@@ -1,0 +1,124 @@
+---
+title: "INMA 0 years QC"
+author: "Carlos Ruiz"
+date: "18/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+The goal of this document is to show the results of the QC of the INMA 0 years data. INMA data was processed in two batches (MeDALL and Esteller). We normalized each batch separately and we merged the normalized results.
+
+```{r }
+library(minfi)
+library(meffil)
+library(tidyverse)
+library(cowplot)
+
+load("../INMA0combined.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
+```
+
+
+## Combined datasets
+
+We will first evaluate the correlation of different variables with the principal components of methylation of the combined dataset.
+
+```{r}
+comb.pcs <- meffil.methylation.pcs(getBeta(gset), probe.range = 40000)
+comb.pcs.df <- comb.pcs %>%
+  data.frame() %>%
+  select(PC1, PC2, PC3, PC4) %>%
+  mutate(Sample_Name = rownames(.)) %>%
+  left_join(colData(gset) %>% data.frame() %>% select(Sample_Name, Sex, dup, batch, idnum), by = "Sample_Name") %>%
+  mutate(Sample = ifelse(dup, idnum, "Reference"))
+```
+
+
+```{r}
+makePlots <- function(df, batch){
+  p1 <- ggplot(df, aes_string(x = "PC1", y = "PC2", color = batch)) +
+    geom_point() + theme_bw()
+  p2 <- ggplot(df, aes_string(x = "PC3", y = "PC4", color = batch)) +
+    geom_point() + theme_bw()
+  plot_grid(p1, p2, nrow = 1)
+}
+```
+
+### Batch
+
+```{r}
+makePlots(comb.pcs.df, "batch")
+```
+
+The samples are clearly separated by batch. 
+
+### Replicates
+
+We will compare how different the same sample processed in a different batch. 
+
+```{r}
+ggplot(comb.pcs.df, aes_string(x = "PC1", y = "PC2", shape = "batch")) +
+    geom_point() + theme_bw() +
+  geom_line(data = subset(comb.pcs.df, dup), aes(group = Sample, color = Sample))
+```
+
+Each replicate falls inside their batch, so the same sample has a different methylation pattern depending on its processing batch.
+
+### Sex
+
+```{r}
+makePlots(comb.pcs.df, "Sex")
+```
+
+
+We could not observed a correlation of sex with the principal components. 
+
+
+## Esteller + replicates
+
+In order to test how the epimutations method work when samples are processed in different batches, we will take samples from Esteller batch and the replicates from MeDALL. We will also test whether the batch effects are visible and whether sex has a big influence on overall methylation.
+
+```{r}
+gset.Esteller <- gset[, gset$batch == "Esteller" | gset$dup]
+esteller.pcs <- meffil.methylation.pcs(getBeta(gset.Esteller), probe.range = 40000)
+esteller.pcs.df <- esteller.pcs %>%
+  data.frame() %>%
+  select(PC1, PC2, PC3, PC4) %>%
+  mutate(Sample_Name = rownames(.)) %>%
+  left_join(colData(gset.Esteller) %>% data.frame() %>% select(Sample_Name, Sex, dup, batch, idnum), by = "Sample_Name") %>%
+  mutate(Sample = ifelse(dup, idnum, "Reference"))
+```
+
+
+### Batch
+
+```{r}
+makePlots(esteller.pcs.df, "batch")
+```
+
+Differences due to batch are now only evident in the fourth PC.
+
+### Replicates
+
+We will compare how different the same sample processed in a different batch. 
+
+```{r}
+ggplot(esteller.pcs.df, aes_string(x = "PC1", y = "PC2")) +
+    geom_point() + theme_bw() +
+  geom_line(data = subset(esteller.pcs.df, dup), aes(group = Sample, color = Sample))
+```
+
+Although samples are closer in the PCs, we still see some differences.
+
+### Sex
+
+```{r}
+makePlots(esteller.pcs.df, "Sex")
+```
+
+We do not observe an effect of sex for Esteller samples only. 
+

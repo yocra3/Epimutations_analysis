@@ -4,16 +4,19 @@
 
 date = java.time.LocalDate.now()
 
-params.data = path("data/")
-params.configMEDALL = path("configs/QC_Medall.R")
-params.configEsteller = path("configs/QC_Estller.R")
+if (params.inputTable) {
+      Channel
+            .fromPath(params.inputTable)
+            .splitCsv(sep: "\t")
+            .map { row -> [ row[0], file(row[1], checkIfExists: true), path(row[2], checkIfExists: true) ,
+             file(row[3], checkIfExists: true) }
+            .ifEmpty { exit 1, "params.inputTable was empty - no input files supplied" }
+            .into { ch_input_QC }
+} else { exit 1, "--inputTable should be text file with the cohort id, the path to IDAT folder, the path to a Rdata with the phenotypes." }
 
-params.genosPath = ""
-params.methyAnnot = ""
-
-phenoPath = file(params.phenoPath)
-genosPath = file(params.genosPath)
-methyAnnot = file(params.methyAnnot)
+ch_geno = Channel.fromPath( [file("${params.genoPath}.bed", checkIfExists: true),
+                            file("${params.genoPath}.bim", checkIfExists: true),
+                            file("${params.genoPath}.fam", checkIfExists: true) })
 
 workflowInfo = """
 Project : $workflow.projectDir
@@ -23,43 +26,57 @@ Git info: $workflow.repository - $workflow.revision [$workflow.commitId]
 Cmd line: $workflow.commandLine
 """
 
-// Run QC and normalization pipeline
-process runQC_normalization {
-
-  publishDir "${params.qcdir}/${date}", mode: 'copy'
-
-  if ( params.version != null ){
-    publishDir "${params.qcdir}/${params.version}", mode: 'copy'
-  }
-
-  input:
-  path inFold from Channel.fromPath("${params.inFold}")
-  val sampleSheet from "${params.sampleSheet}"
-  file(pheno) from phenoPath
-  file(genos) from genosPath
-  val logText from "$workflowInfo"
-  val cores from "${params.cores}"
+process getMethylationSNPs {
 
   output:
-  file 'gset.Rdata' into gset
-  file 'norm.beta.Rdata' into norm_betas
-  file 'norm.obj.pc.Rdata' into norm_obj
-  file 'norm.summary.Rdata' into norm_summary
-  file 'pc.fit.pdf' into pc_fit
-  file 'qc.objects.clean.Rdata' into qc_clean
-  file 'qc.objects.Rdata' into qc_obj
-  file 'qcsummary.clean.Rdata' into qc_sum_clean
-  file 'qcsummary.Rdata' into qc_sum
-  file 'removed.probes.txt' into badprobes
-  file 'removed.samples.txt' into badsamples
-  file 'log.txt' into logCh1
+  file("snp-names.txt") into ch_methy_SNPs
 
+  script:
   """
-  Rscript $baseDir/scripts/methylation_QC.R $inFold $sampleSheet $phenoPath $cores $genosPath
-  echo "$logText" > log.txt
+  Rscript 'writeLines(meffil::meffil.snp.names(), con="snp-names.txt")'
   """
 }
 
+process convertGenotypes {
+
+  input:
+  set file("geno.bed"), file("geno.bim"), file("geno.fam") from ch_geno
+  file(selSNPs) from ch_methy_SNPs.collect()
+
+  output:
+  file("${genoID}.raw") into ch_geno_raw
+
+  script:
+  """
+  plink --bfile geno --extract $selSNPs --recode A --out ${genoID}
+  """
+}
+
+// Run QC and normalization pipeline
+process runQC_normalization {
+
+  publishDir "${params.outdir}/Methylation_QC/${date}/${cohort}", mode: 'copy', pattern: '*.Rdata'
+  publishDir "${params.outdir}/Methylation_QC/${date}/${cohort}", mode: 'copy', pattern: '*.txt'
+  publishDir "${params.outdir}/Methylation_QC/${date}/${cohort}", mode: 'copy', pattern: '*.pdf'
+  publishDir "${params.reports}/Methylation_QC/${date}/${cohort}", mode: 'copy', pattern: '*.html'
+
+  input:
+  set val(cohort), file(config), path("idats/"), file("phenotypes.Rdata") from ch_input_QC
+  file("genotypes.raw") from ch_geno_raw.collect()
+
+  output:
+  set val(cohort), file '*GenomicRatioSet.Rdata' into ch_raw_gset
+  set val(cohort), file '*.norm.obj.pc.Rdata' into ch_raw_gset
+  file("${cohort}*.Rdata")
+  file("${cohort}*.txt")
+  file("${cohort}*.html")
+  file("${cohort}*.pdf")
+
+  """
+  run_methylation_QC.R $config $cohort
+  """
+}
+/*
 // Create GenomicRatioSets with filtered probes
 process prepareGenomicRatioSets {
 
@@ -86,4 +103,4 @@ process prepareGenomicRatioSets {
   Rscript $baseDir/scripts/createGenomicRatioSets.R gset.Rdata $methyAnnot
   echo "$logText" > log.txt
   """
-}
+}*/

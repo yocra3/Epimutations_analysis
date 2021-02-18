@@ -10,11 +10,8 @@
 ## Input files paths
 idatsFold <- "data/IDATs_MeDALL"
 sampleSheetPattern <- "*.csv"
-phenoPath <- "results/preprocess/phenotypes/INMA_phenotypes.Rdata" ## Path to Rdata containing pheno object
-genosPath <- "results/preprocess/methylation/INMA.methSNPs.raw"
-
-## Output name
-outPrefix <- "MeDALL_SAB0"
+phenoPath <- "INMA_phenotypes.Rdata" ## Path to Rdata containing pheno object
+genosPath <- "INMA.methSNPs.raw"
 
 ## Discard samples for the project
 discardSamples <- function(samplesheet){
@@ -45,9 +42,9 @@ adaptSampID <- function(geno) {
 cores <- 16
 
 ## Variables from phenotype to check batch
-batch_var <- c("Slide", "Array", "Sex", "sges", "preterm", "BW", "BL", "HC", "tippart", "Sample_Group",
+batch_var <- c("Slide", "Array",  "TEM", "Sample_Well", "Sex", "sges", "preterm", "BW", "BL", "HC", "tippart",
                "breastfeeding",  "msmk", "meduc", "edadm", "m_not_eur")
-               
+
 ## QC parameters 
 qc.parameters <- meffil.qc.parameters(
   beadnum.samples.threshold             = 0.1,

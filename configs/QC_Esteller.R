@@ -8,23 +8,22 @@
 #'#################################################################################
 
 ## Input files paths
-idatsFold <- "data/IDATs_MeDALL"
+idatsFold <- "data/IDATs_Esteller"
 sampleSheetPattern <- "*.csv"
 phenoPath <- "results/preprocess/phenotypes/INMA_phenotypes.Rdata" ## Path to Rdata containing pheno object
 genosPath <- "results/preprocess/methylation/INMA.methSNPs.raw"
 
 ## Discard samples for the project
 discardSamples <- function(samplesheet){
-  samplesheet <- samplesheet[!grepl("H2O", samplesheet$Sample_Name), ]
+  samplesheet 
 }
 
 ## Create common sample ID between IDATs and phenotypes
 addSampID <- function(samplesheet) {
-  samplesheet$SampleID <- str_extract(samplesheet$Sample_Name, "_[0-9]*_") ## Get internal number
-  samplesheet$SampleID <- gsub("_", "", samplesheet$SampleID) ## Remove _
-  samplesheet$SampleID <- as.character(as.numeric(samplesheet$SampleID)) ## Remove extra 0s
+  samplesheet$SampleID <- as.character(as.numeric(substring(samplesheet$Sample_Name, 7, 10)))
   samplesheet
 }
+ 
 
 ## Create common sample ID between IDATs and genotypes
 adaptSampID <- function(geno) {
@@ -40,7 +39,9 @@ adaptSampID <- function(geno) {
 cores <- 16
 
 ## Variables from phenotype to check batch
-batch_var <- c("Slide", "Array",  "TEM", "Sample_Well", "pred.sex", "Sample_Group")
+batch_var <- c("Slide", "Array",  "Scan_Date", "Sample_Well", "Sample_Plate", "Sex", 
+               "sges", "preterm", "BW", "BL", "HC", "tippart",
+               "breastfeeding",  "msmk", "meduc", "edadm", "m_not_eur")
                
 ## QC parameters 
 qc.parameters <- meffil.qc.parameters(
@@ -52,7 +53,7 @@ qc.parameters <- meffil.qc.parameters(
   snp.concordance.threshold             = 0.95,
   sample.genotype.concordance.threshold = 0.8
 )
-pcs <- 12 
+pcs <- 20
 
 ## Annotation
 array <- "IlluminaHumanMethylation450k"

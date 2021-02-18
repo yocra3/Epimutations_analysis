@@ -1,17 +1,21 @@
+#! Rscript
 #'#################################################################################
 #'#################################################################################
 #' Run methylation QC data
 #' This code performs quality control to methylation data. 
+#' Input: 
+#' - path to config file with the parameters for the QC
+#' - Name of the dataset to name the output files
 #' Important decisions:
-#' - Remove samples not belonging to the project.
 #' - Remove samples based on QC
-#' - Use values from meffil vignette in all parameters
+#' - Use values from meffil vignette in all parameters - see config file
 #'#################################################################################
 #'#################################################################################
 
 ## Capture arguments
 args <- commandArgs(trailingOnly=TRUE)
 configFile <- args[1]
+outPrefix <- args[2]
 
 ## Load libraries ####
 library(meffil)
@@ -29,13 +33,13 @@ options(mc.cores = cores)
 
 ## Prepare sample sheet ####
 ### Load predefined sample sheet
-samplesheet <- meffil.read.samplesheet(base = idatsFold, pattern = sampleSheetPattern)
+samplesheet <- meffil.read.samplesheet(base = "idats/", pattern = sampleSheetPattern)
 
 ## Discard some samples
 samplesheet <- discardSamples(samplesheet)
 
 ### Load and adapt samples data
-load(phenoPath)
+load("phenotypes.Rdata")
 
 ## Merge both (Check in other datasets)
 samplesheet <- addSampID(samplesheet)   
@@ -46,7 +50,7 @@ combSheet <- mutate(combSheet, Sex = substring(Sex, 1, 1))
 
 ## Generate QC report
 ### Load genotypes
-genos <- meffil.extract.genotypes(genosPath)
+genos <- meffil.extract.genotypes("genotypes.raw")
 genos <- adaptSampID(genos)
 
 ## Map genotype IDs to IDAT IDs
@@ -99,6 +103,12 @@ y <- meffil.plot.pc.fit(qc.objects)
 ggsave(y$plot, filename = paste0(outPrefix, ".pc.fit.pdf"), height = 6, width = 6)
 
 norm.objects <- meffil.normalize.quantiles(qc.objects, number.pcs = pcs)
+
+## Add predicted sex as sample sheet variable
+for (i in seq_len(length(norm.objects))){
+  norm.objects[[i]]$samplesheet$pred.sex <- norm.objects[[i]]$predicted.sex
+}
+
 save(norm.objects, file = paste0(outPrefix, ".norm.obj.pc.Rdata"))
 
 norm.beta <- meffil.normalize.samples(norm.objects, cpglist.remove = qc.summary$bad.cpgs$name, verbose = TRUE)
@@ -109,8 +119,8 @@ beta.pcs <- meffil.methylation.pcs(norm.beta, probe.range = 40000)
 norm.parameters <- meffil.normalization.parameters(
   norm.objects,
   variables = batch_var,
-  control.pcs = seq_len(pcs),
-  batch.pcs = seq_len(pcs),
+  control.pcs = seq_len(8),
+  batch.pcs = seq_len(8),
   batch.threshold = 0.01
 )
 norm.summary <- meffil.normalization.summary(norm.objects, pcs = beta.pcs, parameters = norm.parameters)
@@ -119,7 +129,10 @@ meffil.normalization.report(norm.summary, output.file = paste0(outPrefix, ".meth
 
 ## Create GenomicRatioSet
 rownames(combSheet) <- combSheet$Sample_Name
-gset <- makeGenomicRatioSetFromMatrix(norm.beta, pData = combSheet[colnames(norm.beta), ],
+combSheet.final <- combSheet[colnames(norm.beta), ]
+## Add predicted sex
+combSheet.final$pred.sex <- vapply(norm.objects, function(x) x$predicted.sex, character(1))
+gset <- makeGenomicRatioSetFromMatrix(norm.beta, pData = combSheet.final,
                                       array = array,
                                       annotation = annotation)
 save(gset, file = paste0(outPrefix, ".normalizedRaw.GenomicRatioSet.Rdata"))
