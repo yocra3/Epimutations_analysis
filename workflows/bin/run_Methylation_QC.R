@@ -68,8 +68,24 @@ qc.summary <- meffil.qc.summary(
 )
 
 outs <- c()
+
+## Define function to select outliers
+filterOutliers <- function(outlier){
+  subset(outlier, issue %in% c("Control probe (dye.bias)",
+                              "Methylated vs Unmethylated",
+                              "X-Y ratio outlier",
+                              "Low bead numbers",
+                              "Detection p-value",
+                              "Sex mismatch",
+                              "Genotype mismatch",
+                              "Control probe (bisulfite1)",
+                              "Control probe (bisulfite2)")
+)
+}
+
 ## Remove bad samples based on QC report and rerun QC
 outlier <- qc.summary$bad.samples
+outlier <- filterOutliers(outlier)
 round <- 1
 save(qc.objects, file = paste0(outPrefix, ".qc.objects.round", round, ".Rdata"))
 save(qc.summary, file = paste0(outPrefix, ".qcsummary.round", round, ".Rdata"))
@@ -85,6 +101,7 @@ while (nrow(outlier)> 0){
   qc.summary <- meffil.qc.summary(qc.objects, parameters = qc.parameters)
   save(qc.summary, file = paste0(outPrefix, ".qcsummary.round", round, ".Rdata"))
   outlier <- qc.summary$bad.samples
+  outlier <- filterOutliers(outlier)
 }
 save(qc.objects, file = paste0(outPrefix, ".qc.objects.clean.Rdata"))
 save(qc.summary, file = paste0(outPrefix, ".qcsummary.clean.Rdata"))

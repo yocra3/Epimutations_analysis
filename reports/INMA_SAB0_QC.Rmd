@@ -6,12 +6,14 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-## Introduction
+# Introduction
 
-The goal of this document is to show the results of the QC of the INMA 0 years data. INMA data was processed in two batches (MeDALL and Esteller). We normalized each batch separately and we merged the normalized results.
+The goal of this document is to show the results of the QC of the INMA 0 years data. INMA data was processed in two batches (MeDALL and Esteller). We tried two processing approaches:
+1. Normalize each batch separately and merge the normalized results (independent normalization).
+2. Normalize both batches jointly (joint normalization).
 
 ```{r }
 library(minfi)
@@ -20,20 +22,31 @@ library(tidyverse)
 library(cowplot)
 
 load("../INMA0combined.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
+INMA_ind <- gset
+load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
+INMA_comb <- gset
+load("../INMA0combined.epimutations.INMA0.duplicates.Rdata")
+res_ind <- res
+load("../INMA_comb.epimutations.INMA0.duplicates.Rdata")
+res_comb <- res
 ```
 
+# DNA methylation normalization
+## Independent normalization
 
-## Combined datasets
+The results of this section refer to the independent normalization. 
+
+### Combined dataset
 
 We will first evaluate the correlation of different variables with the principal components of methylation of the combined dataset.
 
 ```{r}
-comb.pcs <- meffil.methylation.pcs(getBeta(gset), probe.range = 40000)
-comb.pcs.df <- comb.pcs %>%
+ind.pcs <- meffil.methylation.pcs(getBeta(INMA_ind), probe.range = 40000)
+ind.pcs.df <- ind.pcs %>%
   data.frame() %>%
   select(PC1, PC2, PC3, PC4) %>%
   mutate(Sample_Name = rownames(.)) %>%
-  left_join(colData(gset) %>% data.frame() %>% select(Sample_Name, Sex, dup, batch, idnum), by = "Sample_Name") %>%
+  left_join(colData(INMA_ind) %>% data.frame() %>% select(Sample_Name, Sex, dup, Batch, idnum), by = "Sample_Name") %>%
   mutate(Sample = ifelse(dup, idnum, "Reference"))
 ```
 
@@ -48,77 +61,251 @@ makePlots <- function(df, batch){
 }
 ```
 
-### Batch
+#### Batch
 
 ```{r}
-makePlots(comb.pcs.df, "batch")
+makePlots(ind.pcs.df, "Batch")
 ```
 
 The samples are clearly separated by batch. 
 
-### Replicates
+#### Replicates
 
 We will compare how different the same sample processed in a different batch. 
 
 ```{r}
-ggplot(comb.pcs.df, aes_string(x = "PC1", y = "PC2", shape = "batch")) +
+ggplot(ind.pcs.df, aes_string(x = "PC1", y = "PC2", shape = "Batch")) +
     geom_point() + theme_bw() +
-  geom_line(data = subset(comb.pcs.df, dup), aes(group = Sample, color = Sample))
+  geom_line(data = subset(ind.pcs.df, dup), aes(group = Sample, color = Sample))
 ```
 
 Each replicate falls inside their batch, so the same sample has a different methylation pattern depending on its processing batch.
 
-### Sex
+#### Sex
 
 ```{r}
-makePlots(comb.pcs.df, "Sex")
+makePlots(ind.pcs.df, "Sex")
 ```
 
 
 We could not observed a correlation of sex with the principal components. 
 
 
-## Esteller + replicates
+### Esteller + replicates
 
 In order to test how the epimutations method work when samples are processed in different batches, we will take samples from Esteller batch and the replicates from MeDALL. We will also test whether the batch effects are visible and whether sex has a big influence on overall methylation.
 
 ```{r}
-gset.Esteller <- gset[, gset$batch == "Esteller" | gset$dup]
-esteller.pcs <- meffil.methylation.pcs(getBeta(gset.Esteller), probe.range = 40000)
-esteller.pcs.df <- esteller.pcs %>%
+ind.Esteller <- INMA_ind[, INMA_ind$Batch == "Esteller" | INMA_ind$dup]
+ind.esteller.pcs <- meffil.methylation.pcs(getBeta(ind.Esteller), probe.range = 40000)
+ind.esteller.pcs.df <- ind.esteller.pcs %>%
   data.frame() %>%
   select(PC1, PC2, PC3, PC4) %>%
   mutate(Sample_Name = rownames(.)) %>%
-  left_join(colData(gset.Esteller) %>% data.frame() %>% select(Sample_Name, Sex, dup, batch, idnum), by = "Sample_Name") %>%
+  left_join(colData(ind.Esteller) %>% data.frame() %>% select(Sample_Name, Sex, dup, Batch, idnum), by = "Sample_Name") %>%
   mutate(Sample = ifelse(dup, idnum, "Reference"))
 ```
 
 
-### Batch
+#### Batch
 
 ```{r}
-makePlots(esteller.pcs.df, "batch")
+makePlots(ind.esteller.pcs.df, "Batch")
 ```
 
 Differences due to batch are now only evident in the fourth PC.
 
-### Replicates
+#### Replicates
 
 We will compare how different the same sample processed in a different batch. 
 
 ```{r}
-ggplot(esteller.pcs.df, aes_string(x = "PC1", y = "PC2")) +
+ggplot(ind.esteller.pcs.df, aes_string(x = "PC1", y = "PC2")) +
     geom_point() + theme_bw() +
-  geom_line(data = subset(esteller.pcs.df, dup), aes(group = Sample, color = Sample))
+  geom_line(data = subset(ind.esteller.pcs.df, dup), aes(group = Sample, color = Sample))
 ```
 
 Although samples are closer in the PCs, we still see some differences.
 
-### Sex
+#### Sex
 
 ```{r}
-makePlots(esteller.pcs.df, "Sex")
+makePlots(ind.esteller.pcs.df, "Sex")
 ```
 
 We do not observe an effect of sex for Esteller samples only. 
+
+## Joint normalization
+
+The results of this section refer to the joint normalization. 
+
+### Combined dataset
+
+We will first evaluate the correlation of different variables with the principal components of methylation of the combined dataset.
+
+```{r}
+comb.pcs <- meffil.methylation.pcs(getBeta(INMA_comb), probe.range = 40000)
+comb.pcs.df <- comb.pcs %>%
+  data.frame() %>%
+  select(PC1, PC2, PC3, PC4) %>%
+  mutate(Sample_Name = rownames(.)) %>%
+  left_join(colData(gset) %>% data.frame() %>% select(Sample_Name, Sex, dup, Batch, idnum), by = "Sample_Name") %>%
+  mutate(Sample = ifelse(dup, idnum, "Reference"))
+```
+
+#### Batch
+
+```{r}
+makePlots(comb.pcs.df, "Batch")
+```
+
+There are no differences due to batch. 
+
+#### Replicates
+
+We will compare how different the same sample processed in a different batch. 
+
+```{r}
+ggplot(comb.pcs.df, aes_string(x = "PC1", y = "PC2", shape = "Batch")) +
+    geom_point() + theme_bw() +
+  geom_line(data = subset(comb.pcs.df, dup), aes(group = Sample, color = Sample))
+```
+
+Although at a general level there are no consistent differences between batch, replicate samples are separated in the PCA.
+
+#### Sex
+
+```{r}
+makePlots(comb.pcs.df, "Sex")
+```
+
+We could not observed a correlation of sex with the principal components. 
+
+### Esteller + replicates
+
+In order to test how the epimutations method work when samples are processed in different batches, we will take samples from Esteller batch and the replicates from MeDALL. We will also test whether the batch effects are visible and whether sex has a big influence on overall methylation.
+
+```{r}
+comb.gset.Esteller <- INMA_comb[, INMA_comb$Batch == "Esteller" | INMA_comb$dup]
+comb.esteller.pcs <- meffil.methylation.pcs(getBeta(comb.gset.Esteller), probe.range = 40000)
+comb.esteller.pcs.df <- comb.esteller.pcs %>%
+  data.frame() %>%
+  select(PC1, PC2, PC3, PC4) %>%
+  mutate(Sample_Name = rownames(.)) %>%
+  left_join(colData(comb.gset.Esteller) %>% data.frame() %>% select(Sample_Name, Sex, dup, Batch, idnum), by = "Sample_Name") %>%
+  mutate(Sample = ifelse(dup, idnum, "Reference"))
+```
+
+
+#### Batch
+
+```{r}
+makePlots(comb.esteller.pcs.df, "Batch")
+```
+
+Some MeDALL samples are outliers in the PC3. The remaining are inside the general distribution in all the PCs.
+
+#### Replicates
+
+We will compare how different the same sample processed in a different batch. 
+
+```{r}
+ggplot(comb.esteller.pcs.df, aes_string(x = "PC1", y = "PC2")) +
+    geom_point() + theme_bw() +
+  geom_line(data = subset(comb.esteller.pcs.df, dup), aes(group = Sample, color = Sample))
+```
+
+We still see some differences between the replicates in the PCA.
+
+#### Sex
+
+```{r}
+makePlots(comb.esteller.pcs.df, "Sex")
+```
+
+We do not observe an effect of sex for Esteller samples only. 
+
+# Epimutations detection
+
+We will compare the epimutations detected by each replicate, either in the independent or the joint normalization. We will consider all the methods included in the `epimutacions` package.
+
+```{r}
+ind.res.df <- Reduce(rbind, res_ind) %>%
+  mutate(method = rep(names(res_ind), sapply(res_ind, nrow))) %>%
+  left_join(colData(ind.Esteller) %>% data.frame() %>% select(Sample_Name, idnum, Batch) %>% mutate(sample = Sample_Name), by = "sample") %>%
+   mutate(Normalization = "Independent")
+
+comb.res.df <- Reduce(rbind, res_comb) %>%
+  mutate(method = rep(names(res_comb), sapply(res_comb, nrow))) %>%
+  left_join(colData(comb.gset.Esteller) %>% data.frame() %>% select(Sample_Name, idnum, Batch) %>% mutate(sample = Sample_Name), by = "sample") %>%
+  mutate(Normalization = "Joint")
+  
+all.res.df <- rbind(ind.res.df, comb.res.df)
+all.res.df %>%
+  group_by(Batch, idnum, method, Normalization) %>%
+  summarize(n = n()) %>%
+   mutate(Replicate = factor(idnum)) %>%
+  ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
+  geom_point() + geom_line() + theme_bw() + 
+  facet_grid(method ~ Normalization, scales = "free_y")
+```
+
+When datasets are independently normalized, we observe a higher number of epimutations in the replicate from the external batch (MeDALL) than in the replicate form the reference batch (Esteller). This effect is not so obvious when both datasets are normalized jointly.
+
+```{r}
+ids <- unique(all.res.df$idnum)
+methods <- unique(all.res.df$method)
+norms <- unique(all.res.df$Normalization)
+
+comb <- data.frame(expand_grid(ids, methods, norms))
+overlaps <- sapply(seq_len(nrow(comb)), function(x) {
+  sub <- subset(all.res.df, idnum == comb[x, 1] & method == comb[x, 2] & Normalization == comb[x, 3])
+  
+  if (sum(sub$Batch == "MeDALL") == 0 | sum(sub$Batch == "Esteller") == 0){
+    return(c(Common = 0, medall = 0, esteller = 0))
+  }
+  if (nrow(sub) == 0){
+    return(c(Common = 0, medall = 0, esteller = 0))
+  }
+  
+  medall <- makeGRangesFromDataFrame(subset(sub, Batch == "MeDALL"))
+  est <- makeGRangesFromDataFrame(subset(sub, Batch == "Esteller"))
+  com <- sum(countOverlaps(medall, est))
+  c(Common = com, medall = length(medall) - com, esteller = length(est) - com)
+})
+overlaps.df <- overlaps %>%
+  t() %>%
+  cbind(comb) %>%
+  tibble() %>%
+  filter(!(Common == 0 & medall == 0 & esteller == 0)) %>%
+  filter(!(ids %in% c("204", "484", "655")))
+
+overlaps.df %>%
+  gather("Batch", "Regions", 1:3) %>%
+  ggplot(aes(x = norms, y = Regions, fill = Batch)) +
+    geom_bar(stat="identity") +
+  theme_bw() + 
+  facet_grid(methods ~ ids, scales = "free_y") +
+   theme(axis.text.x = element_text(angle=90, vjust=0.5))
+```
+
+We observed a high variability in the number of epimutations detected between the methods and the individuals. Nonetheless, some general trends were visible. When normalizing the datasets independently, a higher number of epimutations is detected in the replicate from the external batch, as suggested by the previous plot. However, when datasets are normalized jointly, we observed a higher number  of epimutations in the replicate from the reference batch.
+
+```{r}
+overlaps.df %>%
+  gather("Batch", "Regions", 1:3) %>%
+  group_by(norms, methods, ids) %>%
+  mutate(Prop = Regions/sum(Regions)) %>%
+  ggplot(aes(x = norms, y = Prop, fill = Batch)) +
+    geom_bar(stat="identity") +
+  theme_bw() + 
+  facet_grid(methods ~ ids, scales = "free_y") +
+   theme(axis.text.x = element_text(angle=90, vjust=0.5))
+```
+
+When transforming the results to proportions, the main trends remained: independent normalization returned a higher proportion of epimutations in the replicate from the external batch and joint normalization in the replicate from the reference batch. mahdistmcd was the method that reported more consistent epimutations in all conditions. This method also returned a lower number of epimutations, suggesting that is more restrictive. Interistingly, this method had a big increase in the proportion of common epimutations when using joint normalization as opposed to independent.
+
+
+
+
 
