@@ -11,6 +11,7 @@ mkdir results
 mkdir results/preprocess
 mkdir results/preprocess/phenotypes
 mkdir results/preprocess/methylation
+mkdir results/candidateRegions/
 
 mkdir reports
 
@@ -25,3 +26,7 @@ ln -s $HOME/data/WS_INMA/Methylation_INMA/450K_blood/DATA2/samples/BD_INMASab_me
 
 #### Genotypes
 ln -s $HOME/data/WS_INMA/GWAS_INMA/QC/IMPUTATION_HRC_chrX_Michigan/ImpPLINK_QC data/INMA_genos
+
+
+## Download CREs from ENCODE
+wget https://api.wenglab.org/screen_v13/fdownloads/GRCh38-ccREs.bed

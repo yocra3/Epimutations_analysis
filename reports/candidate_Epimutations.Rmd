@@ -1,0 +1,82 @@
+---
+title: "Candidate Regions 450k"
+author: "Carlos Ruiz"
+date: "3/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warnings = FALSE, message = FALSE)
+```
+
+# Introduction
+
+Epimutations detection has two main steps: definition of candidate regions and evaluation of outlier significance. Although there are different algorithms to define epimutations regions, they share common features. In general, epimutations should contain at least 3 CpGs and the distance between contiguous CpGs should be smaller 1Kb. In Illumina 450K array, probes are inequally distributed along the genome, limiting the number of regions that can fulfill the requirements to be considered an epimutation.
+
+The goal of this report is to pre-compute a list of regions that are candidates of becoming an epimutation. 
+
+# Candidate epimutations definition
+
+In order to define the candidate epimutations, we relied on the clustering from bumphunter. We defined a toy dataset with all the CpGs from the Illumina 450K array, and where all the CpGs passed bumphunter cut-off. Then, we run bumphunter and selected those regions with at least 3 CpGs. The code for generating this regions can be found in EpiMutations package.
+
+```{r}
+library(GenomicRanges)
+library(tidyverse)
+library(cowplot)
+library(qqman)
+
+load("../results/candidateRegions/candidateRegions.450K.GRanges.Rdata")
+load("../results/candidateRegions/candidateRegions.450K_hg38.GRanges.Rdata")
+
+candRegs <- candRegsGR %>%
+  as.data.frame() %>%
+  tibble()
+```
+
+# Epimutations Descriptives
+
+We found `r length(candRegsGR)` candidate epimutations. 
+
+```{r}
+lenght_all <- candRegs %>%
+  ggplot(aes(x = L)) +
+  geom_histogram() +
+  theme_bw() +
+  scale_x_continuous(name = "CpG length")
+
+lenght_short <- lenght_all + scale_x_continuous(name = "CpG length", limits = c(3, 32))
+plot_grid(lenght_all, lenght_short)   
+```
+
+The distribution of CpGs per candidate region is very skewed to the left: more than half of the regions has 5 CpGs or less, and `r round(mean(candRegs$L <= 15)*100, 2)`% of regions has 15 CpGs or less. Nonetheless, few candidate regions have a very large number of CpGs, with a maximum in `r max(candRegs$L)`. 
+
+```{r}
+width_all <- candRegs %>%
+  ggplot(aes(x = width)) +
+  geom_histogram() +
+  theme_bw() +
+  scale_x_continuous(name = "Bases length")
+
+width_short <- width_all + scale_x_continuous(name = "Bases length", limits = c(5, 5e3))
+plot_grid(width_all, width_short)   
+```
+
+The length distribution of candidate regions is also skewed to the left: more than half of the regions has less htan 750 bp, and `r round(mean(candRegs$width <= 2e3)*100, 2)`% of regions has less than 2Kb. Nonetheless, few candidate regions are large, with a maximum length of `r max(candRegs$width)` bp. 
+
+```{r}
+candRegs %>%
+  mutate(SNP = cluster,
+         BP = start,
+         CHR = gsub("chr", "", seqnames),
+         CHR = as.numeric(CHR),
+         P = width) %>%
+  manhattan(logp = FALSE)
+```
+
+Most of the largest regions are located in the HLA region, a region with a high number of genes and under recombination. 
+
+# Conversion to hg38
+
+We converted the candidate region from hg19 to hg38 coordinates, using NCBI remap. We selected regions that mapped to one region in hg38 with the same length. This yielded a total of `r length(candRegsGR38)`, the `r round(length(candRegsGR38)/length(candRegsGR)*100, 2)`% of total hg19 regions. 
+
+
