@@ -36,7 +36,7 @@ model <- model.matrix(~ var, pheno)
 ## Run bumphunter
 bumps <- bumphunter(mat, design = model, pos = start(locs.450GR), 
                     chr = as.character(seqnames(locs.450GR)),
-                    cutoff = 0.05)$table
+                    cutoff = 0.05, maxGap = 1000)$table
 bumps.fil <- subset(bumps, L >= 3)
 candRegsGR <- makeGRangesFromDataFrame(bumps.fil, keep.extra.columns = TRUE)
 export.bed(candRegsGR, con = "results/candidateRegions/candidateRegions.450K.hg19.bed")
@@ -65,4 +65,27 @@ save(candRegsGR38, file = "results/candidateRegions/candidateRegions.450K_hg38.G
 
 
 ## Overlap with CREs
-CREs <- import.bed("data/GRCh38-ccREs.bed")
+CREs <- read.table("data/GRCh38-ccREs.bed")
+colnames(CREs) <- c("chr", "start", "end", "var", "Accession", "Type")
+CREsGR <- makeGRangesFromDataFrame(CREs, keep.extra.columns = TRUE)
+names(CREsGR) <- CREsGR$Accession
+
+creOver <- findOverlaps(candRegsGR38, CREsGR)
+candRegsGR38$CRE <- sapply(seq_len(length(candRegsGR38)), function(i){
+  paste(names(CREsGR)[to(creOver)[from(creOver) == i]], collapse = ";")
+})
+
+candRegsGR38$CRE_type <- sapply(seq_len(length(candRegsGR38)), function(i){
+  paste(CREsGR$Type[to(creOver)[from(creOver) == i]], collapse = ";")
+})
+save(candRegsGR38, file = "results/candidateRegions/candidateRegions.450K_hg38.withCREs.GRanges.Rdata")
+
+df <- data.frame(reg = names(candRegsGR38), CRE = candRegsGR38$CRE, 
+                 CRE_type = candRegsGR38$CRE_type)
+rownames(df) <- names(candRegsGR38)
+candRegsGR$CRE <- df[names(candRegsGR), ]$CRE
+candRegsGR$CRE_type <- df[names(candRegsGR), ]$CRE_type
+candRegsGR$CRE[is.na(candRegsGR$CRE)] <- ""
+candRegsGR$CRE_type[is.na(candRegsGR$CRE_type)] <- ""
+
+save(candRegsGR, file = "results/candidateRegions/candidateRegions.450K.withCREs.GRanges.Rdata")

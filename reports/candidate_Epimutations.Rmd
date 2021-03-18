@@ -25,8 +25,8 @@ library(tidyverse)
 library(cowplot)
 library(qqman)
 
-load("../results/candidateRegions/candidateRegions.450K.GRanges.Rdata")
-load("../results/candidateRegions/candidateRegions.450K_hg38.GRanges.Rdata")
+load("../results/candidateRegions/candidateRegions.450K.withCREs.GRanges.Rdata")
+load("../results/candidateRegions/candidateRegions.450K_hg38.withCREs.GRanges.Rdata")
 
 candRegs <- candRegsGR %>%
   as.data.frame() %>%
@@ -38,14 +38,14 @@ candRegs <- candRegsGR %>%
 We found `r length(candRegsGR)` candidate epimutations. 
 
 ```{r}
-lenght_all <- candRegs %>%
+length_all <- candRegs %>%
   ggplot(aes(x = L)) +
   geom_histogram() +
   theme_bw() +
   scale_x_continuous(name = "CpG length")
 
-lenght_short <- lenght_all + scale_x_continuous(name = "CpG length", limits = c(3, 32))
-plot_grid(lenght_all, lenght_short)   
+length_short <- length_all + scale_x_continuous(name = "CpG length", limits = c(3, 32))
+plot_grid(length_all, length_short)   
 ```
 
 The distribution of CpGs per candidate region is very skewed to the left: more than half of the regions has 5 CpGs or less, and `r round(mean(candRegs$L <= 15)*100, 2)`% of regions has 15 CpGs or less. Nonetheless, few candidate regions have a very large number of CpGs, with a maximum in `r max(candRegs$L)`. 
@@ -79,4 +79,54 @@ Most of the largest regions are located in the HLA region, a region with a high 
 
 We converted the candidate region from hg19 to hg38 coordinates, using NCBI remap. We selected regions that mapped to one region in hg38 with the same length. This yielded a total of `r length(candRegsGR38)`, the `r round(length(candRegsGR38)/length(candRegsGR)*100, 2)`% of total hg19 regions. 
 
+After converting to hg38, we can use these ranges to annotated to ENCODE cREs. Overall, we mapped `r sum(candRegs$CRE != "")` candidate regions to cREs, representing `r round(mean(candRegs$CRE != "")*100, 2)`% of total candidate regions.
 
+# Overlap with literature epimutations
+
+Finally, we compared our candidate regions with the epimutations described in PMID 32937144. 
+
+```{r}
+library(readxl)
+
+epi_lit <- read_excel("../data/Epimutations.PMID32937144.xlsx", skip = 2)
+epi_litGR <- makeGRangesFromDataFrame(epi_lit, seqnames.field = "Chr, DMR",
+                                      start.field = "Start, DMR (hg19)",
+                                      end.field = "End, DMR (hg19)")
+
+eqOver <- findOverlaps(epi_litGR -1 , candRegsGR, type = "equal")
+withOver <- findOverlaps(epi_litGR -1 , candRegsGR, type = "within")
+withOver <- withOver[!withOver %in% eqOver]
+allOver <- findOverlaps(epi_litGR -1 , candRegsGR)
+```
+
+`r length(epi_litGR)` were described in PMID 32937144. `r length(eqOver)` were equivalent to one candidate region, while the remaining `r length(withOver)` were inside a candidate region.
+
+```{r}
+lenComp <- data.frame(Literature = width(epi_litGR[from(allOver)]),
+                      Candidate = width(candRegsGR[to(allOver)])) %>%
+  mutate(Difference = Candidate - Literature)
+ggplot(lenComp, aes(x = Literature, y = Candidate)) +
+  geom_point() +
+  geom_abline(slope = 1) +
+  theme_bw()
+```
+As expected, the candidate regions are larger than the regions detected in the literature. The biggest differences are found for the largest candidate regions.
+
+```{r}
+diff_all <- ggplot(lenComp, aes(x = Difference)) +
+  geom_histogram(binwidth = 500) +
+  theme_bw() +
+  scale_x_continuous(name = "Length candidate - length literature")
+
+diff_short <- diff_all + scale_x_continuous(name = "Length candidate - length literature", limits = c(-3, 15e3))
+plot_grid(diff_all, diff_short)   
+```
+
+Most of the regions detected in the literature have a size similar to a candidate region: around half of the regions in the literature have a size less than 1Kb smaller than a candidate region, and this proportion reaches `r round(mean(lenComp$Difference <= 3e3)*100, 2)`% for differences smaller than 3Kb.
+
+As a conclussion, candidate regions are good starting points to define epimutations. Based on these results, we can use them for different approaches:
+
+- Speed up computations: focus only on CpGs included in epimutations
+- Add cREs annotation
+- Homogeneize epimutations naming: this can be very useful when comparing different studies and for reporting
+- Develop new algorithms

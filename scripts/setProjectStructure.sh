@@ -30,3 +30,8 @@ ln -s $HOME/data/WS_INMA/GWAS_INMA/QC/IMPUTATION_HRC_chrX_Michigan/ImpPLINK_QC d
 
 ## Download CREs from ENCODE
 wget https://api.wenglab.org/screen_v13/fdownloads/GRCh38-ccREs.bed
+
+## Download epimutations list
+wget https://ars.els-cdn.com/content/image/1-s2.0-S0002929720302883-mmc4.xlsx
+mv 1-s2.0-S0002929720302883-mmc4.xlsx Epimutations.PMID32937144.xlsx
+chmod 444 Epimutations.PMID32937144.xlsx

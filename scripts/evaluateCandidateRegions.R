@@ -27,3 +27,18 @@ regsCorrs <- lapply(seq_len(length(candRegsGR)), function(x){
   cors <- cor(t(getBeta(set)))
   cors[upper.tri(cors)]
 })
+
+## Not working - low correlation
+
+### Load literature epimutations
+library(readxl)
+
+epi_lit <- read_excel("data/Epimutations.PMID32937144.xlsx", skip = 2)
+epi_litGR <- makeGRangesFromDataFrame(epi_lit, seqnames.field = "Chr, DMR",
+                                      start.field = "Start, DMR (hg19)",
+                                      end.field = "End, DMR (hg19)")
+
+eqOver <- findOverlaps(epi_litGR -1 , candRegsGR, type = "equal")
+
+withOver <- findOverlaps(epi_litGR -1 , candRegsGR, type = "within")
+withOver <- withOver[!withOver %in% eqOver]
