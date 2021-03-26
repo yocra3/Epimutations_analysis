@@ -230,27 +230,87 @@ We do not observe an effect of sex for Esteller samples only.
 We will compare the epimutations detected by each replicate, either in the independent or the joint normalization. We will consider all the methods included in the `epimutacions` package.
 
 ```{r}
+nMethod <- sapply(res_ind, nrow)
+nMethod[sapply(nMethod, is.null)] <- 0
+ind.ids <- ind.Esteller$idnum[duplicated(ind.Esteller$idnum)]
+
 ind.res.df <- Reduce(rbind, res_ind) %>%
-  mutate(method = rep(names(res_ind), sapply(res_ind, nrow))) %>%
-  left_join(colData(ind.Esteller) %>% data.frame() %>% select(Sample_Name, idnum, Batch) %>% mutate(sample = Sample_Name), by = "sample") %>%
+  mutate(method = rep(names(res_ind), unlist(nMethod))) %>%
+ full_join(colData(ind.Esteller) %>% 
+              data.frame() %>% 
+              filter(idnum %in% ind.ids) %>% 
+              select(Sample_Name, idnum, Batch) %>% 
+              mutate(sample = Sample_Name), by = "sample") %>%
+  filter(!is.na(Batch)) %>%
    mutate(Normalization = "Independent")
 
+
+comb.ids <- comb.gset.Esteller$idnum[duplicated(comb.gset.Esteller$idnum)]
 comb.res.df <- Reduce(rbind, res_comb) %>%
   mutate(method = rep(names(res_comb), sapply(res_comb, nrow))) %>%
-  left_join(colData(comb.gset.Esteller) %>% data.frame() %>% select(Sample_Name, idnum, Batch) %>% mutate(sample = Sample_Name), by = "sample") %>%
-  mutate(Normalization = "Joint")
+  full_join(colData(comb.gset.Esteller) %>% 
+              data.frame() %>% 
+              filter(idnum %in% comb.ids) %>% 
+              select(Sample_Name, idnum, Batch) %>% 
+              mutate(sample = Sample_Name), by = "sample") %>%
+   filter(!is.na(Batch)) %>%
+ mutate(Normalization = "Joint")
   
-all.res.df <- rbind(ind.res.df, comb.res.df)
-all.res.df %>%
+all.res.df <- rbind(ind.res.df, comb.res.df) %>%
+  filter(method != "barbosa")
+p1 <- all.res.df  %>%
   group_by(Batch, idnum, method, Normalization) %>%
-  summarize(n = n()) %>%
+  summarize(n = sum(is.na(pvalue) | adj_pvalue < 0.05)) %>%
    mutate(Replicate = factor(idnum)) %>%
   ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
   geom_point() + geom_line() + theme_bw() + 
+  ggtitle("Adjusted p-value < 0.05") +
   facet_grid(method ~ Normalization, scales = "free_y")
+
+p2 <- all.res.df %>%
+ filter(idnum != "339") %>%
+  group_by(Batch, idnum, method, Normalization) %>%
+  summarize(n = sum(is.na(pvalue) | adj_pvalue < 0.05)) %>%
+   mutate(Replicate = factor(idnum)) %>%
+  ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
+  geom_point() + geom_line() + theme_bw() + 
+  ggtitle("Adjusted p-value < 0.05, outlier removed") +
+  facet_grid(method ~ Normalization, scales = "free_y")
+plot_grid(p1, p2, ncol = 2 )
+
+
 ```
 
-When datasets are independently normalized, we observe a higher number of epimutations in the replicate from the external batch (MeDALL) than in the replicate form the reference batch (Esteller). This effect is not so obvious when both datasets are normalized jointly.
+When datasets are independently normalized, we observe a higher number of epimutations in the replicate from the external batch (MeDALL) than in the replicate form the reference batch (Esteller). This effect is not so obvious when both datasets are normalized jointly. In general, there is high heterogeneity in the number of epimutations detected.
+
+```{r}
+p3 <- all.res.df %>%
+ filter(method %in% c("manova", "mlm")) %>%
+  group_by(Batch, idnum, method, Normalization) %>%
+  summarize(n = sum(is.na(pvalue) | pvalue < 0.05/40408)) %>%
+   mutate(Replicate = factor(idnum)) %>%
+  ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
+  geom_point() + geom_line() + theme_bw() + 
+  ggtitle("p-value < 0.05/40408") +
+  facet_grid(method ~ Normalization, scales = "free_y")
+
+
+p4 <- all.res.df %>%
+ filter(method %in% c("manova", "mlm") & idnum != "339") %>%
+  group_by(Batch, idnum, method, Normalization) %>%
+  summarize(n = sum(is.na(pvalue) | pvalue < 0.05/40408)) %>%
+   mutate(Replicate = factor(idnum)) %>%
+  ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
+  geom_point() + geom_line() + theme_bw() + 
+  ggtitle("p-value < 0.05/40408") +
+  facet_grid(method ~ Normalization, scales = "free_y")
+
+plot_grid(p3, p4, ncol = 2 )
+
+```
+
+The tendency is the same when considering all possible regions as the number of effective tests. 
+
 
 ```{r}
 ids <- unique(all.res.df$idnum)
@@ -259,7 +319,8 @@ norms <- unique(all.res.df$Normalization)
 
 comb <- data.frame(expand_grid(ids, methods, norms))
 overlaps <- sapply(seq_len(nrow(comb)), function(x) {
-  sub <- subset(all.res.df, idnum == comb[x, 1] & method == comb[x, 2] & Normalization == comb[x, 3])
+  sub <- subset(all.res.df, idnum == comb[x, 1] & method == comb[x, 2] & Normalization == comb[x, 3] &
+                  (pvalue < 0.05/40408 | is.na(pvalue))  )
   
   if (sum(sub$Batch == "MeDALL") == 0 | sum(sub$Batch == "Esteller") == 0){
     return(c(Common = 0, medall = 0, esteller = 0))
@@ -278,7 +339,7 @@ overlaps.df <- overlaps %>%
   cbind(comb) %>%
   tibble() %>%
   filter(!(Common == 0 & medall == 0 & esteller == 0)) %>%
-  filter(!(ids %in% c("204", "484", "655")))
+  filter(!(ids %in% c("204", "484", "655", "339")))
 
 overlaps.df %>%
   gather("Batch", "Regions", 1:3) %>%
@@ -305,6 +366,45 @@ overlaps.df %>%
 
 When transforming the results to proportions, the main trends remained: independent normalization returned a higher proportion of epimutations in the replicate from the external batch and joint normalization in the replicate from the reference batch. mahdistmcd was the method that reported more consistent epimutations in all conditions. This method also returned a lower number of epimutations, suggesting that is more restrictive. Interistingly, this method had a big increase in the proportion of common epimutations when using joint normalization as opposed to independent.
 
+Finally, we compared the epimutations detected in the Esteller batch (same batch than used for reference) when normalizing the cohort independently or jointly. In this case, we are comparing the epimutations detected in the same biological sample, we change whether the case and control samples were normalized alone or with the other cohort. 
+
+```{r}
+combids <- data.frame(expand_grid(ids, methods))
+esteller.df <- subset(all.res.df, Batch == "Esteller")
+overlapsEsteller <- sapply(seq_len(nrow(combids)), function(x) {
+  sub <- subset(esteller.df, idnum == combids[x, 1] & method == combids[x, 2] &
+                  (pvalue < 0.05/40408 | is.na(pvalue))  )
+  
+  if (sum(sub$Normalization == "Independent") == 0 | sum(sub$Normalization == "Joint") == 0){
+    return(c(common = 0, independent = 0, joint = 0))
+  }
+  if (nrow(sub) == 0){
+    return(c(common = 0, independent = 0, joint = 0))
+  }
+  
+  indep <- makeGRangesFromDataFrame(subset(sub, Normalization == "Independent"))
+  joint <- makeGRangesFromDataFrame(subset(sub, Normalization == "Joint"))
+  com <- sum(countOverlaps(indep, joint))
+  c(common = com, independent = length(indep) - com, joint = length(joint) - com)
+})
+overlapsEsteller.df <- overlapsEsteller %>%
+  t() %>%
+  cbind(combids) %>%
+  tibble() %>%
+  filter(!(common == 0 & independent == 0 & joint == 0)) %>%
+  filter(!(ids %in% c("204", "484", "655", "339")))
+
+
+overlapsEsteller.df %>%
+  gather("Normalization", "Regions", 1:3) %>%
+  ggplot(aes(x = as.factor(ids), y = Regions, fill = Normalization)) +
+    geom_bar(stat="identity") +
+  theme_bw() + 
+  facet_grid(methods ~ ., scales = "free_y") +
+   theme(axis.text.x = element_text(angle=90, vjust=0.5))
+```
+
+We observed a very strong effect of the normalization on the epimutations detected: the same samples can lead to different detection of epimutations, depending if they are normalized alone or together with other samples. We do not observe big differences between the methods, with differences, between the individuals. 
 
 
 

@@ -32,9 +32,8 @@ cases <- gset.sel[, gset.sel$dup]
 controls <- gset.sel[, !gset.sel$dup]
 
 methods <- names(epi_parameters())
-res <- lapply(methods[methods != "barbosa"], epimutations, case_samples = cases, control_panel = controls)
-
-names(res) <- methods[methods != "barbosa"]
+names(methods) <- methods
+res <- lapply(methods, epimutations, case_samples = cases, control_panel = controls)
 save(res, file = paste0(outPrefix, ".epimutations.INMA0.duplicates.Rdata"))
 
 
