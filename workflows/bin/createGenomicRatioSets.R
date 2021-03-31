@@ -16,8 +16,9 @@
 ## Capture arguments
 args <- commandArgs(trailingOnly=TRUE)
 gsetfile <- args[1]
-manifest <- args[2]
-outPrefix <- args[3]
+qcfile <- args[2]
+manifest <- args[3]
+outPrefix <- args[4]
 
 ## Load libraries ####
 library(minfi)
@@ -25,6 +26,9 @@ library(minfi)
 ## Load dataset ####
 load(gsetfile)
 grAnnot <- readRDS(manifest)
+load(qcfile)
+ori <- gset
+
 
 ### Probes not measuring methylation
 gset <- dropMethylationLoci(gset)
@@ -37,3 +41,11 @@ save(gset, file =  paste0(outPrefix, ".normalizedComBat.filterAnnotatedProbes.Ge
 ### Remove probes in sexual chromosomes
 gset <- gset[!seqnames(rowRanges(gset)) %in% c("chrX", "chrY"), ]
 save(gset, file = paste0(outPrefix, ".normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata"))
+
+## Create Initial and final dataset with missings
+final <- gset
+
+dp <- meffil.load.detection.pvalues(qc.objects)
+gset <- ori
+
+save(gset, file = paste0(outPrefix, ".normalizedComBat.allCpGs.GenomicRatioSet.Rdata"))
