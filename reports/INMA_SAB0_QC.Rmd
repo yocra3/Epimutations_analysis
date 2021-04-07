@@ -322,15 +322,20 @@ overlaps <- sapply(seq_len(nrow(comb)), function(x) {
   sub <- subset(all.res.df, idnum == comb[x, 1] & method == comb[x, 2] & Normalization == comb[x, 3] &
                   (pvalue < 0.05/40408 | is.na(pvalue))  )
   
-  if (sum(sub$Batch == "MeDALL") == 0 | sum(sub$Batch == "Esteller") == 0){
-    return(c(Common = 0, medall = 0, esteller = 0))
-  }
   if (nrow(sub) == 0){
     return(c(Common = 0, medall = 0, esteller = 0))
   }
   
-  medall <- makeGRangesFromDataFrame(subset(sub, Batch == "MeDALL"))
-  est <- makeGRangesFromDataFrame(subset(sub, Batch == "Esteller"))
+  medall <- subset(sub, Batch == "MeDALL")
+  est <- subset(sub, Batch == "Esteller")
+  if (nrow(medall) == 0){
+    return(c(Common = 0, medall = 0, esteller = nrow(est)))
+  }
+  if (nrow(est) == 0){
+    return(c(Common = 0, medall = nrow(medall), esteller = 0))
+  }
+  medall <- makeGRangesFromDataFrame(medall)
+  est <- makeGRangesFromDataFrame(est)
   com <- sum(countOverlaps(medall, est))
   c(Common = com, medall = length(medall) - com, esteller = length(est) - com)
 })
@@ -375,15 +380,23 @@ overlapsEsteller <- sapply(seq_len(nrow(combids)), function(x) {
   sub <- subset(esteller.df, idnum == combids[x, 1] & method == combids[x, 2] &
                   (pvalue < 0.05/40408 | is.na(pvalue))  )
   
-  if (sum(sub$Normalization == "Independent") == 0 | sum(sub$Normalization == "Joint") == 0){
-    return(c(common = 0, independent = 0, joint = 0))
-  }
   if (nrow(sub) == 0){
     return(c(common = 0, independent = 0, joint = 0))
   }
   
-  indep <- makeGRangesFromDataFrame(subset(sub, Normalization == "Independent"))
-  joint <- makeGRangesFromDataFrame(subset(sub, Normalization == "Joint"))
+  
+  indep <- subset(sub, Normalization == "Independent")
+  joint <- subset(sub, Normalization == "Joint")
+  if (nrow(indep) == 0){
+    return(c(Common = 0, independent = 0, joint = nrow(joint)))
+  }
+  if (nrow(joint) == 0){
+    return(c(Common = 0, independent = nrow(indep), joint = 0))
+  }
+
+  
+  indep <- makeGRangesFromDataFrame(indep)
+  joint <- makeGRangesFromDataFrame(joint)
   com <- sum(countOverlaps(indep, joint))
   c(common = com, independent = length(indep) - com, joint = length(joint) - com)
 })
@@ -391,8 +404,7 @@ overlapsEsteller.df <- overlapsEsteller %>%
   t() %>%
   cbind(combids) %>%
   tibble() %>%
-  filter(!(common == 0 & independent == 0 & joint == 0)) %>%
-  filter(!(ids %in% c("204", "484", "655", "339")))
+  filter(!(common == 0 & independent == 0 & joint == 0)) 
 
 
 overlapsEsteller.df %>%

@@ -47,5 +47,12 @@ final <- gset
 
 dp <- meffil.load.detection.pvalues(qc.objects)
 gset <- ori
+dp.f <- dp[rownames(gset), colnames(gset)]
 
-save(gset, file = paste0(outPrefix, ".normalizedComBat.allCpGs.GenomicRatioSet.Rdata"))
+beta <- getBeta(gset)
+beta[dp.f > 2e-16] <- NA
+assay(gset) <- beta
+save(gset, file = paste0(outPrefix, ".normalizedComBat.allCpGs.withNA.GenomicRatioSet.Rdata"))
+
+gset <- gset[rownames(final), colnames(final)]
+save(gset, file = paste0(outPrefix, ".normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata"))
