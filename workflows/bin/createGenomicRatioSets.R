@@ -22,6 +22,7 @@ outPrefix <- args[4]
 
 ## Load libraries ####
 library(minfi)
+library(meffil)
 
 ## Load dataset ####
 load(gsetfile)

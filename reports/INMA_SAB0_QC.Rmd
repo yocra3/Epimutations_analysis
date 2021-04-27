@@ -1,7 +1,7 @@
 ---
 title: "INMA 0 years QC"
 author: "Carlos Ruiz"
-date: "18/2/2021"
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
@@ -232,35 +232,33 @@ We will compare the epimutations detected by each replicate, either in the indep
 ```{r}
 nMethod <- sapply(res_ind, nrow)
 nMethod[sapply(nMethod, is.null)] <- 0
-ind.ids <- ind.Esteller$idnum[duplicated(ind.Esteller$idnum)]
 
-ind.res.df <- Reduce(rbind, res_ind) %>%
+ind.res.df <- Reduce(rbind, lapply(res_ind, function(x) x[, 1:12])) %>%
   mutate(method = rep(names(res_ind), unlist(nMethod))) %>%
- full_join(colData(ind.Esteller) %>% 
+ left_join(colData(ind.Esteller) %>% 
               data.frame() %>% 
-              filter(idnum %in% ind.ids) %>% 
               select(Sample_Name, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
   filter(!is.na(Batch)) %>%
    mutate(Normalization = "Independent")
 
 
-comb.ids <- comb.gset.Esteller$idnum[duplicated(comb.gset.Esteller$idnum)]
-comb.res.df <- Reduce(rbind, res_comb) %>%
+comb.res.df <- Reduce(rbind, lapply(res_comb, function(x) x[, 1:12])) %>%
   mutate(method = rep(names(res_comb), sapply(res_comb, nrow))) %>%
-  full_join(colData(comb.gset.Esteller) %>% 
+  left_join(colData(comb.gset.Esteller) %>% 
               data.frame() %>% 
-              filter(idnum %in% comb.ids) %>% 
               select(Sample_Name, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
    filter(!is.na(Batch)) %>%
  mutate(Normalization = "Joint")
+
+comSamps <- intersect(unique(ind.res.df$sample), unique(comb.res.df$sample))
   
 all.res.df <- rbind(ind.res.df, comb.res.df) %>%
-  filter(method != "barbosa")
+  filter(sample %in% comSamps)
 p1 <- all.res.df  %>%
   group_by(Batch, idnum, method, Normalization) %>%
-  summarize(n = sum(is.na(pvalue) | adj_pvalue < 0.05)) %>%
+  summarize(n = sum(!is.na(sz) & (is.na(pvalue) | adj_pvalue < 0.05))) %>%
    mutate(Replicate = factor(idnum)) %>%
   ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
   geom_point() + geom_line() + theme_bw() + 
@@ -270,7 +268,7 @@ p1 <- all.res.df  %>%
 p2 <- all.res.df %>%
  filter(idnum != "339") %>%
   group_by(Batch, idnum, method, Normalization) %>%
-  summarize(n = sum(is.na(pvalue) | adj_pvalue < 0.05)) %>%
+  summarize(n = sum(!is.na(sz) & (is.na(pvalue) | adj_pvalue < 0.05))) %>%
    mutate(Replicate = factor(idnum)) %>%
   ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
   geom_point() + geom_line() + theme_bw() + 
@@ -281,13 +279,15 @@ plot_grid(p1, p2, ncol = 2 )
 
 ```
 
+Sample 339 had a much higher number of epimutations in the independent normalization than in the joint normalization, probably due to technical issues. Therefore, we decided to exclude this sample from subsequent analysis. 
+
 When datasets are independently normalized, we observe a higher number of epimutations in the replicate from the external batch (MeDALL) than in the replicate form the reference batch (Esteller). This effect is not so obvious when both datasets are normalized jointly. In general, there is high heterogeneity in the number of epimutations detected.
 
 ```{r}
 p3 <- all.res.df %>%
  filter(method %in% c("manova", "mlm")) %>%
   group_by(Batch, idnum, method, Normalization) %>%
-  summarize(n = sum(is.na(pvalue) | pvalue < 0.05/40408)) %>%
+    summarize(n = sum(!is.na(sz) & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
    mutate(Replicate = factor(idnum)) %>%
   ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
   geom_point() + geom_line() + theme_bw() + 
@@ -298,7 +298,7 @@ p3 <- all.res.df %>%
 p4 <- all.res.df %>%
  filter(method %in% c("manova", "mlm") & idnum != "339") %>%
   group_by(Batch, idnum, method, Normalization) %>%
-  summarize(n = sum(is.na(pvalue) | pvalue < 0.05/40408)) %>%
+    summarize(n = sum(!is.na(sz) & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
    mutate(Replicate = factor(idnum)) %>%
   ggplot(aes(x = Batch, y = n, color = Replicate, group = Replicate)) +
   geom_point() + geom_line() + theme_bw() + 
@@ -319,7 +319,7 @@ norms <- unique(all.res.df$Normalization)
 
 comb <- data.frame(expand_grid(ids, methods, norms))
 overlaps <- sapply(seq_len(nrow(comb)), function(x) {
-  sub <- subset(all.res.df, idnum == comb[x, 1] & method == comb[x, 2] & Normalization == comb[x, 3] &
+  sub <- subset(all.res.df, !is.na(sz) & idnum == comb[x, 1] & method == comb[x, 2] & Normalization == comb[x, 3] &
                   (pvalue < 0.05/40408 | is.na(pvalue))  )
   
   if (nrow(sub) == 0){
@@ -344,7 +344,7 @@ overlaps.df <- overlaps %>%
   cbind(comb) %>%
   tibble() %>%
   filter(!(Common == 0 & medall == 0 & esteller == 0)) %>%
-  filter(!(ids %in% c("204", "484", "655", "339")))
+  filter(ids != "339")
 
 overlaps.df %>%
   gather("Batch", "Regions", 1:3) %>%
@@ -377,7 +377,7 @@ Finally, we compared the epimutations detected in the Esteller batch (same batch
 combids <- data.frame(expand_grid(ids, methods))
 esteller.df <- subset(all.res.df, Batch == "Esteller")
 overlapsEsteller <- sapply(seq_len(nrow(combids)), function(x) {
-  sub <- subset(esteller.df, idnum == combids[x, 1] & method == combids[x, 2] &
+  sub <- subset(esteller.df, !is.na(sz) & idnum == combids[x, 1] & method == combids[x, 2] &
                   (pvalue < 0.05/40408 | is.na(pvalue))  )
   
   if (nrow(sub) == 0){
@@ -404,7 +404,7 @@ overlapsEsteller.df <- overlapsEsteller %>%
   t() %>%
   cbind(combids) %>%
   tibble() %>%
-  filter(!(common == 0 & independent == 0 & joint == 0)) 
+  filter(!(Common == 0 & independent == 0 & joint == 0)) 
 
 
 overlapsEsteller.df %>%

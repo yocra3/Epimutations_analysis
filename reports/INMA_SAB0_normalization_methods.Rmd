@@ -1,0 +1,129 @@
+---
+title: "Comparison normalization algorithms"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+The goal of this document is to compare how the different normalization algorithms can affect to the epimutations' detection. To this end, we normalized the INMA samples from the Esteller batch using seven different approaches included in `minfi`:
+
+- Raw preprocessing 
+- Illumina preprocessing, as performed by Genome Studio
+- SWAN normalization
+- Quantile normalization
+- Noob normalization
+- Functional normalization
+
+We also included the comparison with the functional normalization using `meffil`.
+
+# Comparison
+
+```{r}
+# library(minfi)
+#library(epimutacions)
+library(tidyverse)
+library(cowplot)
+library(GenomicRanges)
+
+norms <- c("Raw", "Illumina", "SWAN", "Quantile", "Noob", "Functional")
+names(norms) <- norms
+
+createResultsDF <- function(dflist, norm){
+  
+  nMethod <- sapply(dflist, nrow)
+  df <- Reduce(rbind, lapply(dflist, function(x) x[, 1:12])) %>%
+  mutate(method = rep(names(dflist), unlist(nMethod))) %>%
+   mutate(Normalization = norm)
+  df
+}
+res.list <- lapply(norms, function(x){
+  load(paste0("../Esteller.minfi", x, "Normalization.epimutations.INMA0.duplicates.Rdata"))
+  df <- createResultsDF(res, x)
+  df
+})
+
+
+load("../INMA0combined.epimutations.INMA0.duplicates.Rdata")
+res.list$meffil <- createResultsDF(res, "meffil")
+
+comSamps <- Reduce(intersect, lapply(res.list, function(x) unique(x$sample)))
+
+all.res.df <- Reduce(rbind, res.list) %>%
+  filter(sample %in% comSamps)
+
+all.res.df %>%
+  filter(!is.na(sz)) %>%
+  ggplot(aes(x = Normalization, fill = Normalization)) + 
+  geom_bar() +
+  facet_wrap(~ sample) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5))
+
+```
+
+Overall, all the normalization returned a similar number of epimutations, with the exception of quantile normalization that is not returning any epimutations for any sample. Therefore, we removed it from the remaining results.
+
+
+```{r}
+all.res.df  %>%
+  filter(Normalization != "Quantile") %>%
+  group_by(sample, method, Normalization) %>%
+  summarize(n = sum(!is.na(sz) & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
+ggplot(aes(x = Normalization, y = n, fill = Normalization)) +
+  geom_bar(stat="identity") +
+  theme_bw() + 
+  facet_grid(method ~ sample, scales = "free_y") +
+  theme(axis.text.x = element_text(angle=90, vjust=0.5))
+```
+
+Barbosa appeared as the most robust method. Barbosa identified the same number of epimutations independent of the normalization algorithm, but in one case. The other methods had higher variability on the number of epimutations detected. Nonetheless, there are no apparent consistent associations between normalization algorithms and epimutations methods. The exception migh be mahdistmcd, which apparently detects more epimutations for datasets normalized with Noob, meffil or functional normalization.
+
+
+```{r}
+methods <- unique(all.res.df$method)
+combids <- data.frame(expand_grid(comSamps, methods))
+
+getOverlaps <- function(i) {
+  samp <- combids[i, 1]
+  meth <- combids[i, 2]
+  
+  sub <- all.res.df  %>%
+    filter(Normalization != "Quantile") %>%
+    filter(sample == samp) %>%
+    filter(method == meth) %>%
+    filter(!is.na(sz) & (is.na(pvalue) | pvalue < 0.05/40408))
+ 
+  if (nrow(sub) == 0){
+      return(data.frame(nNorm = 6, sample = samp, method = meth))
+  }
+  subGR <- makeGRangesFromDataFrame(sub)
+  uniqGR <- reduce(subGR)
+   
+  nMatch <- sapply(seq_len(length(uniqGR)), function(x) countOverlaps(uniqGR[x], subGR))
+  data.frame(nNorm = nMatch, sample = samp, method = meth)
+}
+comRegsdf <- lapply(seq_len(nrow(combids)), getOverlaps) %>%
+  Reduce(f = rbind) %>%
+  mutate(nMatch = ifelse(nNorm > 6, 6, nNorm))
+
+comRegsdf %>%
+  mutate(coherence = ifelse(nMatch >= 5, "Coherent", "Discordant")) %>%
+  ggplot(aes(x = nMatch, fill = coherence)) +
+  geom_histogram(binwidth = 1) +
+   theme_bw() + 
+  facet_grid(method ~ sample, scales = "free_y") 
+
+comRegsdf %>%
+ group_by(method) %>%
+  summarise(prop = mean(nMatch >= 5))
+```
+
+In this plot, we show, for each sample and method, in how many of the normalization methods an epimutation has been detected. Thus, each epimutation can take a value between 1 and 6, depending if it was detected only after a normalization approach or 5 if it was detected independent of the normalization approach. We also considered that samples without any epimutation under any normalization method had a maximum consistency.
+
+To simplify the comparison, we considered as coherent (red) those regions identified after using 5/6 normalization methods and discordant those regions identified with less methods. This plot shows that barbosa is the most robust approach, where all the epimutations has been detected in at least 5/6 of the normalization methods. The next robust methods are beta and isoforest, which have almost around half of the regions robustly identified. Finally, manova and mlm seems very sensitive to the normalization algorithm and most of the detected epimutations were only identified under 1 or 2 normalization algorithms.

@@ -2,7 +2,6 @@
 #'#################################################################################
 #'#################################################################################
 #' Run epimutations analysis on INMA age 0.
-#' This code performs quality control to methylation data. 
 #' Input: 
 #' - path to normalized GenomicRatioSet with NAs for failing probes
 #' - Name of the dataset to name the output files
@@ -14,33 +13,22 @@
 args <- commandArgs(trailingOnly=TRUE)
 gsetPath <- args[1]
 outPrefix <- args[2]
+samps <- args[3]
 
 ## Load libraries
 library(minfi)
 library(epimutacions)
 
 load(gsetPath)
-
-if (length(args) > 2){
-  samps <- args[3]
-  load(samps)
-} else {
-  samps <- NULL
-}
-
-## Select samples from Esteller and duplicates
-gset.sel <- gset[, gset$Batch == "Esteller" | gset$dup]
+load(samps)
 
 ## Select CpGs in candidate regions
-gset.sel <- subsetByOverlaps(gset.sel, candRegsGR)
+gset.sel <- subsetByOverlaps(gset, candRegsGR)
 
 ### Make cases and controls datasets
-cases <- gset.sel[, gset.sel$dup]
-controls <- gset.sel[, !gset.sel$dup]
+controls <- gset.sel[, samps]
+cases <- gset.sel[, !colnames(gset.sel) %in% samps]
 
-if(!is.null(samps)){
-  controls <- controls[, samps]
-}
 
 methods <- c("manova", "mlm", "isoforest", "mahdistmcd", "barbosa", "beta")
 names(methods) <- methods

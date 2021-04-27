@@ -1,0 +1,178 @@
+---
+title: "INMA_SAB0_epimutations"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+In this document, we will explore the epimutations detected by the different methods. We preselected the four methods that reported less epimutations: beta, mahdist, manova and mlm. We will also compare the difference between the two normalization procedures: independent and joint. We will focus on the epimutations detected in Esteller batch, the batch from the samples uesd as controls.
+
+# Load data
+
+
+```{r }
+library(minfi)
+library(tidyverse)
+library(cowplot)
+library(epimutacions)
+
+load("../INMA0combined.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+INMA_ind <- gset
+load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+INMA_comb <- gset
+load("../INMA0combined.epimutations.INMA0.duplicates.Rdata")
+res_ind <- res
+load("../INMA_comb.epimutations.INMA0.duplicates.Rdata")
+res_comb <- res
+load("../INMA.commonControlSamples.Rdata")
+
+ind.Esteller <- INMA_ind[, INMA_ind$Batch == "Esteller"]
+comb.Esteller <- INMA_comb[, INMA_comb$Batch == "Esteller"]
+
+
+nMethod <- sapply(res_ind, nrow)
+nMethod[sapply(nMethod, is.null)] <- 0
+
+ind.res.df <- Reduce(rbind, lapply(res_ind, function(x) x[, 1:12])) %>%
+  mutate(method = rep(names(res_ind), unlist(nMethod))) %>%
+ left_join(colData(ind.Esteller) %>% 
+              data.frame() %>% 
+              select(Sample_Name, idnum, Batch) %>% 
+              mutate(sample = Sample_Name), by = "sample") %>%
+  filter(!is.na(Batch)) %>%
+   mutate(Normalization = "Independent")
+
+
+comb.res.df <- Reduce(rbind, lapply(res_comb, function(x) x[, 1:12])) %>%
+  mutate(method = rep(names(res_comb), sapply(res_comb, nrow))) %>%
+  left_join(colData(comb.Esteller) %>% 
+              data.frame() %>% 
+              select(Sample_Name, idnum, Batch) %>% 
+              mutate(sample = Sample_Name), by = "sample") %>%
+   filter(!is.na(Batch)) %>%
+ mutate(Normalization = "Joint")
+
+comSamps <- intersect(unique(ind.res.df$sample), unique(comb.res.df$sample))
+  
+sel.methods <- c("mlm", "beta", "manova", "mahdistmcd", "barbosa") 
+names(sel.methods) <- sel.methods
+all.res.df <- rbind(ind.res.df, comb.res.df) %>%
+  filter(method %in% sel.methods) %>%
+  filter(!is.na(sz)) %>%
+  filter(Batch == "Esteller") %>%
+  filter(pvalue < 0.05/40408 | is.na(pvalue)) %>%
+  filter(sample %in% comSamps)
+
+```
+
+
+```{r}
+plotEpimutationsSamples <- function(samp){
+  df <- subset(all.res.df, sample == samp)
+  gr <- makeGRangesFromDataFrame(df)
+  com <- GenomicRanges::reduce(gr)
+  
+  methods.list <- lapply(sel.methods, function(x) subset(df, method == x))
+  methods.list <- methods.list[sapply(methods.list, nrow) > 0]
+  methods.GR <- lapply(methods.list, function(x){
+    if (nrow(x) > 0){
+      GenomicRanges::reduce(makeGRangesFromDataFrame(x))
+    } else{
+      return(NULL)
+    }
+  })
+  
+  ov.list <- lapply(methods.GR, findOverlaps, query = com)
+  reg.tab <- table(unlist(lapply(ov.list, from)))
+  
+  reg.groups <- lapply(5:1, function(x) {
+    names(reg.tab)[reg.tab == x]
+  })
+  
+  fin.ov <- findOverlaps(com, gr)
+  
+  ## Plot By groups
+  reg.plots <- lapply(reg.groups, function(x){
+    if (length(x) == 0){
+      return(NULL)
+    }
+    plots <- lapply(x, function(i){
+      comGR <- com[as.numeric(i)]
+      rows <- to(fin.ov)[from(fin.ov) == i]
+      df.fil <- df[rows, ]
+      
+      df.fil.ind <- subset(df.fil, Normalization == "Independent")
+      df.fil.joint <- subset(df.fil, Normalization == "Joint")
+      ind <- plot_epimutations(df.fil[1, ], ind.Esteller[, c(samps, df.fil[1, ]$sample)]) +
+        labs(title = "Independent Normalization",
+             subtitle = ifelse(nrow(df.fil.ind) > 0,
+                               paste("Detected by", paste(df.fil.ind$method, collapse = ", ")),
+                               "Undetected")) +
+        ylim(c(0, 1))
+      comb <- plot_epimutations(df.fil[1, ], comb.Esteller[, c(samps, df.fil[1, ]$sample)]) +
+        labs(title = "Joint Normalization",
+             subtitle = ifelse(nrow(df.fil.joint) > 0,
+                               paste("Detected by", paste(df.fil.joint$method, collapse = ", ")),
+                               "Undetected")) +
+        ylim(c(0, 1))
+      plot_grid(ind, comb, ncol = 2)
+    })
+    plots
+  })
+  reg.plots
+}
+```
+
+# SAB_C_0016
+
+```{r}
+plotEpimutationsSamples("SAB_C_0016")
+```
+
+# SAB_C_0017
+
+```{r}
+plotEpimutationsSamples("SAB_C_0017")
+```
+
+# SAB_C_0120
+
+```{r}
+plotEpimutationsSamples("SAB_C_0120")
+```
+
+# SAB_C_0211
+
+```{r}
+plotEpimutationsSamples("SAB_C_0211")
+```
+
+# SAB_C_0244
+
+```{r}
+plotEpimutationsSamples("SAB_C_0244")
+```
+
+# SAB_C_0340
+
+```{r}
+plotEpimutationsSamples("SAB_C_0340")
+```
+
+# SAB_C_0387
+
+```{r}
+plotEpimutationsSamples("SAB_C_0387")
+```
+
+# SAB_C_0636
+
+```{r}
+plotEpimutationsSamples("SAB_C_0636")
+```
