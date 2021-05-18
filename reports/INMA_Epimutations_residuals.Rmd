@@ -1,0 +1,687 @@
+---
+title: "INMA epimutations residuals"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+In this document, we will analyze the epimutations identified in INMA. We used four methods to detected epimutations (beta, barbosa, mlm and manova). We compared each samples against the rest of the cohort (leave one out). We run the analysis including all samples, only boys or only girls. 
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(minfi)
+library(robustbase)
+library(epimutacions)
+
+load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
+```
+
+```{r}
+make_res_df <- function(res.list){
+  nMethod <- sapply(res.list, nrow)
+  nMethod[sapply(nMethod, is.null)] <- 0
+  methods <- names(res.list)
+  names(methods) <- methods
+  Reduce(rbind, res.list) %>%
+    mutate(method = rep(methods, unlist(nMethod))) %>%
+    left_join(colData(gset) %>% 
+                data.frame() %>% 
+                select(Sample_Name, Sex, smkpreg, Batch) %>% 
+                mutate(sample = Sample_Name), by = "sample")
+}
+make_sum_df <- function(res_df){
+  res_df %>%
+  group_by(method, sample, Sex, smkpreg, Batch) %>%
+  summarize(n = sum(start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
+  mutate(n_plot = ifelse(n > 10, "10+", as.character(n)),
+         n_plot = factor(n_plot, levels = c(0:10, "10+")))
+}
+
+```
+
+
+# All samples
+
+## Summary
+
+We first evaluated the results of each method independently. In all the comparisons, we used a robust poisson model to account for individuals with an extremely large number of epimutations. 
+
+```{r }
+load("../INMA_comb.epimutations.allSamples.residuals.Rdata")
+
+res.inma0.df <- make_res_df(res.inma0.residuals.list) 
+all.sum.df <- make_sum_df(res.inma0.df)
+
+```
+
+```{r}
+all.sum.df %>%
+  ggplot(aes(x = n_plot, fill = method)) +
+  geom_bar(position=position_dodge()) +
+  theme_bw()
+summary(glmrob(n ~ method, all.sum.df, family = "poisson"))
+```
+
+As previously reported, barbosa is the method that detects less epimutations, followed by beta, mlm and manova. 
+
+```{r}
+all.sum.df %>%
+  ggplot(aes(x = n_plot, fill = Sex)) +
+  geom_bar(position=position_dodge()) +
+  theme_bw() +
+  facet_wrap(~ method, scales = "free")
+
+lapply(methods, function(x){
+  summary(glmrob(n ~ Sex, all.sum.df, subset = method == x, family = "poisson"))
+})
+
+```
+
+We did not found differences between boys and girls.
+
+
+```{r}
+all.sum.df %>%
+  ggplot(aes(x = n_plot, fill = Batch)) +
+  geom_bar(position=position_dodge()) +
+  theme_bw() +
+  facet_wrap(~ method, scales = "free")
+
+lapply(methods, function(x){
+  summary(glmrob(n ~ Batch, all.sum.df, subset = method == x, family = "poisson"))
+})
+
+```
+
+We found less epimutations in samples from MeDALL batch. 
+
+```{r}
+all.sum.df %>%
+  filter(!is.na(smkpreg)) %>%
+  ggplot(aes(x = n_plot, fill = smkpreg)) +
+  geom_bar(position=position_dodge()) +
+  theme_bw() +
+  facet_wrap(~ method, scales = "free")
+
+lapply(methods, function(x){
+  summary(glmrob(n ~ smkpreg, all.sum.df, subset = method == x, family = "poisson"))
+})
+lapply(methods, function(x){
+  summary(glmrob(n ~ smkpreg + Sex + Batch, all.sum.df, subset = method == x, family = "poisson"))
+})
+
+```
+
+All the methods found more epimutations in children whose mothers smoked during the whole pregnancy. Nonetheless, the association is only signficant with manova.
+
+
+## Comparison with crude data
+
+```{r }
+load("../INMA_comb.epimutations.allSamples.Rdata")
+
+res.inma0.ori.df <- make_res_df(res.inma0.list) 
+all.sum.ori.df <- make_sum_df(res.inma0.ori.df)
+```
+
+
+```{r}
+ori.comb <- all.sum.df %>%
+  ungroup() %>%
+  mutate(residuals = n) %>%
+  select(residuals, method, sample) %>% 
+  right_join(all.sum.ori.df %>%
+  ungroup() %>%
+  mutate(crude = n) %>%
+  select(crude, method, sample), by = c("method", "sample")) %>%
+  mutate(Epimutations_diff = residuals - crude) 
+
+ggplot(ori.comb, aes(x = Epimutations_diff)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw() +
+  xlab("Difference in epimutations between raw and residuals")
+```
+
+For beta and barbosa, we detected almost the same number of epimutations with raw values or after computing residuals. For beta, some samples had more epimutations with the residuals, while samples that had a huge number of epimutations in the raw data, had much less epimutations in the residuals.
+
+Mlm and manova had a great heterogeinity in the results, with almost all individuals having a different number of epimutations. 
+
+```{r}
+getOverlaps <- function(method, sample, epi_df1, epi_df2){
+  
+  epi1 <- epi_df1[epi_df1$method == method & epi_df1$sample == sample, ]
+  epi1 <- subset(epi1, start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))
+  
+  epi2 <- epi_df2[epi_df2$method == method & epi_df2$sample == sample, ]
+  epi2 <- subset(epi2, start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))
+
+  
+  n1 <- nrow(epi1)
+  n2 <- nrow(epi2)
+  
+  if (n1 == 0 | n2 == 0){
+    return(c(epi1 = n1, epi2 = n2, Common = 0))
+  }
+  epi1GR <- makeGRangesFromDataFrame(epi1)
+  epi2GR <- makeGRangesFromDataFrame(epi2)
+  com <- sum(countOverlaps(epi1GR, epi2GR))
+  return(c(epi1 = n1 - com, epi2 = n2 - com, Common = com))
+
+}
+ori.over <- lapply(seq_len(nrow(ori.comb)), function(i){
+  getOverlaps(ori.comb[i, ]$method,
+              ori.comb[i, ]$sample,
+              res.inma0.ori.df, res.inma0.df)
+})
+ori.over.df <- Reduce(rbind, ori.over) %>%
+  cbind(ori.comb[, c("method", "sample")], .) %>%
+  tibble() %>%
+  mutate(Raw = epi1, Residuals = epi2)
+
+ori.over.df %>%
+  filter(!(Raw == 0 & Residuals == 0 & Common == 0 )) %>%
+  gather(Type, N, 5:7) %>%
+  mutate(Type = factor(Type, levels = c("Raw", "Residuals", "Common"))) %>%
+  mutate(N = ifelse(N > 25, 25, N)) %>%
+  ggplot(aes(x = N, fill = Type)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw()
+```
+
+In this plot, we show the epimutations detected only in the raw dataset, only in the residuals and in common (raw and residuals) for those samples where at least one epimutation was detected. For barbosa, most individuals had epimutations detected in raw and residuals datasets, so most individuals had 0 epimutations specific of raw or residuals datasets. Next, we observe more epimutations specific of the residuals dataset than of the raw dataset.
+
+In beta, we observed a higher proportion of individuals with epimutations specific of the residuals dataset. 
+
+Finally, for mlm and manova we observed a high heterogeneity, with many individuals having epimutations specific of the raw or residuals dataset. 
+
+```{r}
+epi_crude <- subset(res.inma0.df, sample == "SAB_C_0039" & method %in% c("beta", "barbosa"))
+epi_crude2 <- subset(res.inma0.ori.df, sample == "SAB_C_0039" & method %in% c("beta", "barbosa"))
+
+p1_crude <- plot_epimutations(epi_crude[3,], gset[, gset$Sex == "M"]) +
+  ggtitle("Raw values")
+p1_residuals <- plot_epimutations(epi_crude[3,], inma0) +
+  ggtitle("Residual values")
+plot_grid(p1_crude, p1_residuals, ncol = 2)
+
+epi_crude <- subset(res.inma0.df, sample == "SAB_C_0066" & method %in% c("beta", "barbosa"))
+epi_crude2 <- subset(res.inma0.ori.df, sample == "SAB_C_0066" & method %in% c("beta", "barbosa"))
+
+p2_crude <- plot_epimutations(epi_crude2[3,], gset[, gset$Sex == "M"]) +
+  ggtitle("Raw values")
+p2_residuals <- plot_epimutations(epi_crude2[3,], inma0) +
+  ggtitle("Residual values")
+plot_grid(p2_crude, p2_residuals, ncol = 2)
+```
+
+
+These two examples show the difference two epimutations only detected in the residuals or raw dataset. 
+
+
+
+
+# Stratification by sex
+
+We evaluated the effect of running the epimutations in boys and girls independently.
+
+## Boys
+
+```{r }
+load("../INMA_comb.epimutations.boys.residuals.Rdata")
+
+res.inma0.boys.df <- make_res_df(res.inma0.boys.residuals.list) 
+boys.sum.df <- make_sum_df(res.inma0.boys.df)
+```
+
+
+```{r}
+boys.comb <- all.sum.df %>%
+  ungroup() %>%
+  mutate(all = n) %>%
+  select(all, method, sample) %>% 
+  right_join(boys.sum.df %>%
+  ungroup() %>%
+  mutate(boys = n) %>%
+  select(boys, method, sample), by = c("method", "sample")) %>%
+  mutate(Epimutations_diff = boys - all) 
+
+ggplot(boys.comb, aes(x = Epimutations_diff)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw() +
+  xlab("Difference in epimutations between boys and all")
+```
+
+We still see more epimutations in boys compared to the whole cohort when using the dataset with residuals. Nonetheless, fewer samples have much more epimutations in boys than in the whole dataset, when compared to the raw dataset.
+
+```{r}
+boys.over <- lapply(seq_len(nrow(boys.comb)), function(i){
+  getOverlaps(boys.comb[i, ]$method,
+              boys.comb[i, ]$sample,
+              res.inma0.boys.df, res.inma0.df)
+})
+boys.over.df <- Reduce(rbind, boys.over) %>%
+  cbind(boys.comb[, c("method", "sample")], .) %>%
+  tibble() %>%
+  mutate(Boys = epi1, All = epi2)
+
+boys.over.df %>%
+  filter(!(All == 0 & Boys == 0 & Common == 0 )) %>%
+  gather(Type, N, 5:7) %>%
+  mutate(N = ifelse(N > 25, 25, N)) %>%
+  ggplot(aes(x = N, fill = Type)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw()
+```
+
+In barbosa, we are detecting more epimutations specific of boys when applying the residuals. With beta, we also see more epimutations specific of boys. Finally, manova and mlm seem to have more coherent results between boys and whole datset when using residuals. 
+
+```{r}
+epi_boys <- subset(res.inma0.boys.df, sample == "SAB_C_0160" & method %in% c("beta", "barbosa"))
+
+p1_boys <- plot_epimutations(epi_boys[1,], inma0[, inma0$Sex == "M"]) +
+  ggtitle("Only boys")
+p1_all <- plot_epimutations(epi_boys[1,], inma0) +
+  ggtitle("Whole dataset")
+plot_grid(p1_boys, p1_all, ncol = 2)
+
+```
+
+We only detect the epimutation in boys because a high number of girls had more outlier values. 
+
+## Boys in crude model
+
+We explored whether epimutations specific of boys were detected when using the models with residuals.
+
+```{r }
+load("../INMA_comb.epimutations.boys.Rdata")
+
+res.inma0.boys.ori.df <- make_res_df(res.inma0.boys.list) 
+boys.sum.ori.df <- make_sum_df(res.inma0.boys.ori.df)
+```
+
+```{r}
+getSpecific <- function(method, sample, epi_df1, epi_df2){
+  epi1 <- epi_df1[epi_df1$method == method & epi_df1$sample == sample, ]
+  epi1 <- subset(epi1, start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))
+  
+  epi2 <- epi_df2[epi_df2$method == method & epi_df2$sample == sample, ]
+  epi2 <- subset(epi2, start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))
+
+  n1 <- nrow(epi1)
+  n2 <- nrow(epi2)
+  
+  if (n1 == 0 | n2 == 0){
+    return(epi1)
+  }
+  epi1GR <- makeGRangesFromDataFrame(epi1)
+  epi2GR <- makeGRangesFromDataFrame(epi2)
+  ov <- findOverlaps(epi1GR, epi2GR)
+  return(epi1[-from(unique(ov)), ])
+}
+boys.specific.ori <- lapply(seq_len(nrow(boys.comb)), function(i){
+  getSpecific(boys.comb[i, ]$method,
+              boys.comb[i, ]$sample,
+              res.inma0.boys.ori.df, res.inma0.ori.df)
+}) %>% Reduce(f = rbind, x = .)
+
+boys.pairs <- boys.specific.ori %>%
+  select(method, sample) %>%
+  distinct()
+
+boys.specific.over <- lapply(seq_len(nrow(boys.pairs)), function(i){
+  getOverlaps(boys.pairs[i, ]$method,
+              boys.pairs[i, ]$sample,
+              boys.specific.ori, res.inma0.df)
+})
+Reduce(rbind, boys.specific.over) %>%
+  cbind(boys.pairs, .) %>%
+  tibble() %>%
+  mutate(Boys_ori = epi1,
+         Boys_ori_tot = Boys_ori + Common) %>%
+  group_by(method) %>%
+  summarize(prop = sum(Common)/sum(Boys_ori_tot))
+
+```
+
+This values represent the proportion of epimutations specific of boys in the raw dataset that are captured in the whole dataset after applying the residuals. For all the methods, this proportion is very low, suggesting that adjusting for residuals do not increase the epimutations specific of boys.
+
+```{r}
+lapply(seq_len(nrow(boys.pairs)), function(i){
+  getOverlaps(boys.pairs[i, ]$method,
+              boys.pairs[i, ]$sample,
+              boys.specific.ori, res.inma0.boys.df)
+}) %>% Reduce(f = rbind, x = .) %>%
+  cbind(boys.pairs, .) %>%
+  tibble() %>%
+  mutate(Boys_ori = epi1,
+         Boys_ori_tot = Boys_ori + Common) %>%
+  group_by(method) %>%
+  summarize(prop = sum(Common)/sum(Boys_ori_tot))
+
+```
+
+For barbosa, 50% of epimutations specific of boys in the raw dataset, were also detected only in boys in the residuals dataset. This proportion was lower for beta (20%) and for mlm and manova. 
+
+These results suggest that epimutations only identified in boys are not due to global different levels in methylation between boys and girls. 
+
+
+```{r}
+epi_boys <- subset(res.inma0.boys.ori.df, sample == "SAB_C_0466" & method %in% c("beta", "barbosa"))
+
+p1_boys <- plot_epimutations(epi_boys[2,], gset[, gset$Sex == "M"]) +
+  ggtitle("Boys - Raw")
+p1_all <- plot_epimutations(epi_boys[2,], gset) +
+  ggtitle("All - Raw")
+p1_boys2 <- plot_epimutations(epi_boys[2,], inma0[, inma0$Sex == "M"]) +
+  ggtitle("Boys - Residuals")
+p1_all2 <- plot_epimutations(epi_boys[2,], inma0) +
+  ggtitle("All - Residuals")
+plot_grid(p1_boys, p1_all,p1_boys2, p1_all2,ncol = 2)
+```
+
+
+After applying the residuals, the variance of the samples is reduced while the outlier values remain stable. Therefore, this epimutation can be called even with the whole dataset. 
+
+## Girls
+
+```{r }
+load("../INMA_comb.epimutations.girls.residuals.Rdata")
+
+res.inma0.girls.df <- make_res_df(res.inma0.girls.residuals.list) 
+girls.sum.df <- make_sum_df(res.inma0.girls.df)
+```
+
+
+```{r}
+girls.comb <- all.sum.df %>%
+  ungroup() %>%
+  mutate(all = n) %>%
+  select(all, method, sample) %>% 
+  right_join(girls.sum.df %>%
+  ungroup() %>%
+  mutate(girls = n) %>%
+  select(girls, method, sample), by = c("method", "sample")) %>%
+  mutate(Epimutations_diff = girls - all) 
+
+ggplot(girls.comb, aes(x = Epimutations_diff)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw() +
+  xlab("Difference in epimutations between girls and all")
+```
+
+We still see more epimutations in girls compared to the whole cohort when using the dataset with residuals. Nonetheless, fewer samples have much more epimutations in girls than in the whole dataset, when compared to the raw dataset.
+
+```{r}
+girls.over <- lapply(seq_len(nrow(girls.comb)), function(i){
+  getOverlaps(girls.comb[i, ]$method,
+              girls.comb[i, ]$sample,
+              res.inma0.girls.df, res.inma0.df)
+})
+girls.over.df <- Reduce(rbind, girls.over) %>%
+  cbind(girls.comb[, c("method", "sample")], .) %>%
+  tibble() %>%
+  mutate(Girls = epi1, All = epi2)
+
+girls.over.df %>%
+  filter(!(All == 0 & Girls == 0 & Common == 0 )) %>%
+  gather(Type, N, 5:7) %>%
+  mutate(Type = factor(Type, levels = c("All", "Girls", "Common"))) %>%
+  mutate(N = ifelse(N > 25, 25, N)) %>%
+  ggplot(aes(x = N, fill = Type)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw()
+```
+
+In barbosa, we are detecting more epimutations specific of girls when applying the residuals. With beta, we also see more epimutations specific of girls. Finally, manova and mlm seem to have more coherent results between boys and whole dataset when using residuals. 
+
+```{r}
+epi_girls <- subset(res.inma0.girls.df, sample == "SAB_C_0644" & method %in% c("beta", "barbosa"))
+
+p1_girls <- plot_epimutations(epi_girls[2,], inma0[, inma0$Sex == "F"]) +
+  ggtitle("Only girls")
+p1_all <- plot_epimutations(epi_girls[2,], inma0) +
+  ggtitle("Whole dataset")
+plot_grid(p1_girls, p1_all, ncol = 2)
+```
+
+We only detect the epimutation in girls because a high number of boys had more outlier values. 
+
+## Girls in crude model
+
+We explored whether epimutations specific of girls were detected when using the models with residuals.
+
+```{r }
+load("../INMA_comb.epimutations.girls.Rdata")
+
+res.inma0.girls.ori.df <- make_res_df(res.inma0.girls.list) 
+girls.sum.ori.df <- make_sum_df(res.inma0.girls.ori.df)
+```
+
+```{r}
+girls.specific.ori <- lapply(seq_len(nrow(girls.comb)), function(i){
+  getSpecific(girls.comb[i, ]$method,
+              girls.comb[i, ]$sample,
+              res.inma0.girls.ori.df, res.inma0.ori.df)
+}) %>% Reduce(f = rbind, x = .)
+
+girls.pairs <- girls.specific.ori %>%
+  select(method, sample) %>%
+  distinct()
+
+girls.specific.over <- lapply(seq_len(nrow(girls.pairs)), function(i){
+  getOverlaps(girls.pairs[i, ]$method,
+              girls.pairs[i, ]$sample,
+              girls.specific.ori, res.inma0.df)
+})
+Reduce(rbind, girls.specific.over) %>%
+  cbind(girls.pairs, .) %>%
+  tibble() %>%
+  mutate(girls_ori = epi1,
+         girls_ori_tot = girls_ori + Common) %>%
+  group_by(method) %>%
+  summarize(prop = sum(Common)/sum(girls_ori_tot))
+
+```
+
+This values represent the proportion of epimutations specific of girls in the raw dataset that are captured in the whole dataset after applying the residuals. For all the methods, this proportion is very low, suggesting that adjusting for residuals do not increase the epimutations specific of girls.
+
+```{r}
+lapply(seq_len(nrow(girls.pairs)), function(i){
+  getOverlaps(girls.pairs[i, ]$method,
+              girls.pairs[i, ]$sample,
+              girls.specific.ori, res.inma0.girls.df)
+}) %>% Reduce(f = rbind, x = .) %>%
+  cbind(girls.pairs, .) %>%
+  tibble() %>%
+  mutate(Girls_ori = epi1,
+         Girls_ori_tot = Girls_ori + Common) %>%
+  group_by(method) %>%
+  summarize(prop = sum(Common)/sum(Girls_ori_tot))
+
+```
+
+For barbosa, 48% of epimutations specific of girls in the raw dataset, were also detected only in girls in the residuals dataset. This proportion was lower for beta (30%) and for mlm and manova. 
+
+These results suggest that epimutations only identified in girls are not due to global different levels in methylation between boys and girls. 
+
+
+```{r}
+epi_girls <- subset(res.inma0.girls.ori.df, sample == "SAB_C_0405" & method %in% c("beta", "barbosa"))
+
+p1_girls <- plot_epimutations(epi_girls[2,], gset[, gset$Sex == "F"]) +
+  ggtitle("Girls - Raw")
+p1_all <- plot_epimutations(epi_girls[2,], gset) +
+  ggtitle("All - Raw")
+p1_girls2 <- plot_epimutations(epi_girls[2,], inma0[, inma0$Sex == "F"]) +
+  ggtitle("Girls - Residuals")
+p1_all2 <- plot_epimutations(epi_girls[2,], inma0) +
+  ggtitle("All - Residuals")
+plot_grid(p1_girls, p1_all, p1_girls2, p1_all2, ncol = 2)
+```
+
+
+After applying the residuals, the variance of the samples is reduced while the outlier values remain stable. Therefore, this epimutation can be called even with the whole dataset. 
+
+
+# Stratification by bacth
+
+We evaluated the effect of running the epimutations in each batch independently.
+
+## Esteller
+
+```{r }
+load("../INMA_comb.epimutations.esteller.residuals.Rdata")
+res.inma0.esteller.df <- make_res_df(res.inma0.esteller.residuals.list) 
+esteller.sum.df <- make_sum_df(res.inma0.esteller.df)
+```
+
+
+```{r}
+esteller.comb <- all.sum.df %>%
+  ungroup() %>%
+  mutate(all = n) %>%
+  select(all, method, sample) %>% 
+  right_join(esteller.sum.df %>%
+  ungroup() %>%
+  mutate(esteller = n) %>%
+  select(esteller, method, sample), by = c("method", "sample")) %>%
+  mutate(Epimutations_diff = esteller - all) 
+
+ggplot(esteller.comb, aes(x = Epimutations_diff)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw() +
+  xlab("Difference in epimutations between Esteller and all")
+```
+
+After applying the residuals, we do not have samples with extremely different number of epimutations in Esteller as compared with the whole datasets. Nonetheles, we still see some differences, in particular for manova and mlm.
+
+
+```{r}
+esteller.over <- lapply(seq_len(nrow(esteller.comb)), function(i){
+  getOverlaps(esteller.comb[i, ]$method,
+              esteller.comb[i, ]$sample,
+              res.inma0.esteller.df, res.inma0.df)
+})
+esteller.over.df <- Reduce(rbind, esteller.over) %>%
+  cbind(esteller.comb[, c("method", "sample")], .) %>%
+  tibble() %>%
+  mutate(Esteller = epi1, All = epi2)
+
+esteller.over.df %>%
+  filter(!(All == 0 & Esteller == 0 & Common == 0 )) %>%
+  gather(Type, N, 5:7) %>%
+  mutate(Type = factor(Type, levels = c("All", "Esteller", "Common"))) %>%
+  mutate(N = ifelse(N > 25, 25, N)) %>%
+  ggplot(aes(x = N, fill = Type)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw()
+```
+
+When comparing the epimtuations identified in the whole dataset or in Esteller, the conclussions are very similar to the raw dataset. Beta and barbosa are very stable, and only few samples have more epimutations in Esteller (other have more epimutations in the whole dataset with the beta). On the other hand, mlm and manova have the more inestable results, and smaples can have either more or less epimutations. Nonethelles, no individuals have very high number of epimutations after computing the residuals. 
+
+```{r}
+esteller.sum.df %>%
+  filter(!is.na(smkpreg)) %>%
+  ggplot(aes(x = n_plot, fill = smkpreg)) +
+  geom_bar(position=position_dodge()) +
+  theme_bw() +
+  facet_wrap(~ method, scales = "free")
+
+lapply(methods, function(x){
+  summary(glmrob(n ~ smkpreg, esteller.sum.df, subset = method == x, family = "poisson"))
+})
+lapply(methods, function(x){
+  summary(glmrob(n ~ smkpreg + Sex , esteller.sum.df, subset = method == x, family = "poisson"))
+})
+
+```
+
+When considering only Esteller samples, we observed that children whose mother smoked throughout the whole pregnancy had more epimutations, although this is not significant in any dataset.
+
+## MeDALL
+```{r }
+load("../INMA_comb.epimutations.medall.residuals.Rdata")
+res.inma0.medall.df <- make_res_df(res.inma0.medall.residuals.list) 
+medall.sum.df <- make_sum_df(res.inma0.medall.df)
+```
+
+
+```{r}
+medall.comb <- all.sum.df %>%
+  ungroup() %>%
+  mutate(all = n) %>%
+  select(all, method, sample) %>% 
+  right_join(medall.sum.df %>%
+  ungroup() %>%
+  mutate(medall = n) %>%
+  select(medall, method, sample), by = c("method", "sample")) %>%
+  mutate(Epimutations_diff = medall - all) 
+
+ggplot(medall.comb, aes(x = Epimutations_diff)) +
+  geom_histogram() +
+  facet_grid(method ~ .) +
+  theme_bw() +
+  xlab("Difference in epimutations between MeDALL and all")
+```
+
+The number of epimutations is very similar only in MeDALL subset or the whole cohort. We do not observe individuals with very different number of epimutations. 
+
+
+```{r}
+medall.over <- lapply(seq_len(nrow(medall.comb)), function(i){
+  getOverlaps(medall.comb[i, ]$method,
+              medall.comb[i, ]$sample,
+              res.inma0.medall.df, res.inma0.df)
+})
+medall.over.df <- Reduce(rbind, medall.over) %>%
+  cbind(medall.comb[, c("method", "sample")], .) %>%
+  tibble() %>%
+  mutate(MeDALL = epi1, All = epi2)
+
+medall.over.df %>%
+  filter(!(All == 0 & MeDALL == 0 & Common == 0 )) %>%
+  gather(Type, N, 5:7) %>%
+  mutate(Type = factor(Type, levels = c("All", "MeDALL", "Common"))) %>%
+  mutate(N = ifelse(N > 25, 25, N)) %>%
+  ggplot(aes(x = N, fill = Type)) +
+  geom_histogram(binwidth = 1) +
+  facet_grid(method ~ .) +
+  theme_bw()
+```
+
+After applying the residuals, more epimutations are detected with beta or barbosa in MeDALL. Nonetheless, these epimutations were already detected in the whole dataset. Less individuals have very different number of epimutations after adjusting for residuals.
+
+```{r}
+medall.sum.df %>%
+  filter(!is.na(smkpreg)) %>%
+  ggplot(aes(x = n_plot, fill = smkpreg)) +
+  geom_bar(position=position_dodge()) +
+  theme_bw() +
+  facet_wrap(~ method, scales = "free")
+
+lapply(methods, function(x){
+  summary(glmrob(n ~ smkpreg, medall.sum.df, subset = method == x, family = "poisson"))
+})
+lapply(methods, function(x){
+  summary(glmrob(n ~ smkpreg + Sex , medall.sum.df, subset = method == x, family = "poisson"))
+})
+```
+
+For beta and barbosa, children whose mother smoked had less epimutations while for mlm and manova we observed the opposite pattern. However, none of the associations is statistically significant.
