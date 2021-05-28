@@ -27,6 +27,11 @@ ln -s $HOME/data/WS_INMA/Methylation_INMA/450K_blood/DATA2/samples/BD_INMASab_me
 #### Genotypes
 ln -s $HOME/data/WS_INMA/GWAS_INMA/QC/IMPUTATION_HRC_chrX_Michigan/ImpPLINK_QC data/INMA_genos
 
+### HELIX
+ln -s $HOME/data/WS_HELIX/HELIX_preproc/methylation/Final_data/methylome_subcohort_ComBatSlide_6cells_v4.Rdata data/HELIX.GenomicRatioSet.Rdata
+ln -s $HOME/data/WS_HELIX/HELIX_preproc/methylation/QC_CRA/detectionvals.RData data/HELIX.detectionPvals.Rdata
+
+
 
 ## Download CREs from ENCODE
 wget https://api.wenglab.org/screen_v13/fdownloads/GRCh38-ccREs.bed

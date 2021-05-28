@@ -209,7 +209,7 @@ Finally, for mlm and manova we observed a high heterogeneity, with many individu
 epi_crude <- subset(res.inma0.df, sample == "SAB_C_0039" & method %in% c("beta", "barbosa"))
 epi_crude2 <- subset(res.inma0.ori.df, sample == "SAB_C_0039" & method %in% c("beta", "barbosa"))
 
-p1_crude <- plot_epimutations(epi_crude[3,], gset[, gset$Sex == "M"]) +
+p1_crude <- plot_epimutations(epi_crude[3,], gset) +
   ggtitle("Raw values")
 p1_residuals <- plot_epimutations(epi_crude[3,], inma0) +
   ggtitle("Residual values")
@@ -218,7 +218,7 @@ plot_grid(p1_crude, p1_residuals, ncol = 2)
 epi_crude <- subset(res.inma0.df, sample == "SAB_C_0066" & method %in% c("beta", "barbosa"))
 epi_crude2 <- subset(res.inma0.ori.df, sample == "SAB_C_0066" & method %in% c("beta", "barbosa"))
 
-p2_crude <- plot_epimutations(epi_crude2[3,], gset[, gset$Sex == "M"]) +
+p2_crude <- plot_epimutations(epi_crude2[3,], gset) +
   ggtitle("Raw values")
 p2_residuals <- plot_epimutations(epi_crude2[3,], inma0) +
   ggtitle("Residual values")
