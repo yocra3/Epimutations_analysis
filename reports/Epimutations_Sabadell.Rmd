@@ -1,0 +1,414 @@
+---
+title: "Epimutations in INMA Sabadell"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+In this document, we will summarize the main results of the epimutations detection in INMA Sabadell samples measured at 0, 4 and 8 years.
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(minfi)
+library(robustbase)
+library(epimutacions)
+library(UpSetR)
+```
+
+# Normalized data
+
+First, we will compare the results obtained computing the epimutations in the dataset without applying the residuals.
+
+
+```{r}
+## 0 years
+load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+gset.0 <- gset
+
+## 4 years
+load("../MeDALL_all.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+
+gset.sab <- gset[, gset$Sample_Group == "Age_4" & grepl("^04|SAB", gset$Sample_Name)]
+gset.4  <- gset.sab[, !duplicated(gset.sab$idnum)]
+
+## 8 years
+load("../results/preprocess/HELIX/HELIX.withNA.GenomicRatioSet.Rdata")
+helix <- gset[, gset$cohort != "MOBA" & gset$h_ethnicity_3cat == "WhiteEur_WhiteOther"]
+```
+
+```{r}
+make_res_df <- function(res.list, pheno, dataset){
+  nMethod <- sapply(res.list, nrow)
+  nMethod[sapply(nMethod, is.null)] <- 0
+  methods <- names(res.list)
+  names(methods) <- methods
+  Reduce(rbind, res.list) %>%
+    mutate(method = rep(methods, unlist(nMethod)),
+           dataset = dataset) %>%
+    left_join(pheno %>% 
+                data.frame() %>% 
+                select(Sample_Name, Sex, idnum) %>% 
+                mutate(sample = Sample_Name,
+                       idnum = as.character(idnum)), by = "sample")
+}
+make_sum_df <- function(res_df){
+  res_df %>%
+  group_by(method, sample, Sex, idnum, dataset) %>%
+  summarize(n = sum(start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
+  mutate(n_cat = ifelse(n > 1, "1+", as.character(n)))
+}
+
+```
+
+```{r}
+load("../INMA_comb.epimutations.allSamples.Rdata")
+load("../INMA4.epimutations.allSamples.Rdata")
+load("../results/epimutations/HELIX.epimutations.allSamples.Rdata")
+
+helixp <- colData(helix)
+helixp$idnum <- sapply(strsplit(helixp$SampleID, "_"), `[`, 2)
+helixp$Sex <- helixp$e3_sex
+helixp$Sample_Name <- helixp$SampleID
+
+res.inma0.df <- make_res_df(res.inma0.list, pheno = colData(gset.0), dataset = "Cord Blood") 
+inma0.sum.df <- make_sum_df(res.inma0.df)
+
+
+res.inma4.df <- make_res_df(res.inma4.list, pheno = colData(gset.4), dataset = "4 years") 
+inma4.sum.df <- make_sum_df(res.inma4.df)
+
+res.helix.df <- make_res_df(res.helix.list, pheno = helixp, dataset = "8 years") 
+helix.sum.df <- make_sum_df(res.helix.df)
+
+all.sum.df <- rbind(inma0.sum.df, inma4.sum.df, helix.sum.df) %>%
+  mutate(dataset = factor(dataset, levels = c("Cord Blood", "4 years", "8 years")))
+methods <- unique(all.sum.df$method)
+names(methods ) <- methods
+
+all.res.df <- rbind(res.inma0.df, res.inma4.df, res.helix.df) %>%
+  mutate(dataset = factor(dataset, levels = c("Cord Blood", "4 years", "8 years")))
+```
+
+```{r}
+all.sum.df %>%
+  ggplot(aes(x = n_cat)) +
+  geom_bar() +
+  theme_bw() +
+  facet_grid(dataset ~ method, scales = "free_y")
+
+sum.props <- lapply(methods, function(x) {
+  
+  sub <- subset(all.sum.df, method == x)
+   round(prop.table(table(sub$dataset, sub$n_cat), margin = 1)*100, 2)
+
+})
+sum.props
+```
+
+We observed that more children had epimutations, and a higher proportion of children had more than 1 epimutation in cord blood than at 8 years. This tendency is common for the four methods, although the proportiongs are very different. Thus, in barbosa around 17% of individuals had an epimutations on cord blood, while less than 1% have an epimutation at 8 years. For beta, this discrepancy is higher for beta, passing from 35% to 2%. manova and mlm detected epimutations in almost all samples at cord blood (more than 85%), while they detected epimutations at half of ndividuals at 8 years (around 60%).
+
+```{r}
+sab.sum.df <- subset(all.sum.df, dataset != "8 years" | grepl("SAB", sample))
+
+upsetList <- lapply(unique(sab.sum.df$dataset), function(x) {
+  unique(subset(sab.sum.df, dataset == x)$idnum)
+  })
+names(upsetList) <- unique(sab.sum.df$dataset)
+upset(fromList(upsetList))
+```
+
+110 individuals were shared between the three time points. Next, we have some overlap between cord blood and 4 years and between cord blood and 8 years.
+
+```{r}
+tab <- table(sab.sum.df$idnum)
+dup <- names(tab)[tab > 4]
+com.res.df <- subset(all.res.df, idnum %in% dup & chromosome != 0 & (is.na(pvalue) | pvalue < 0.05/40408))
+long_sum <- com.res.df %>%
+  group_by(idnum, method, epi_region_id) %>%
+  summarize(n_dataset = length(unique(dataset))) %>%
+  filter(n_dataset > 1) %>%
+  arrange(method)
+
+table(long_sum$method, long_sum$n_dataset)
+```
+
+6 epimutations were found in two timepoints with beta, while 29 and 46 epimutations were indentifed in two time-points and 1 in the three timepoints. With barbosa, all epimutations were only found in a timepoint. 
+
+```{r}
+epi_com_beta <- subset(com.res.df, idnum == "304" & method %in% c("beta", "barbosa"))
+
+p1_cord <- plot_epimutations(epi_com_beta[1,], gset.0) +
+  ggtitle("Cord Blood")
+p1_4years <- epi_com_beta %>%
+  mutate(sample = "04_304_4") %>%
+  plot_epimutations(methy = gset.4) +
+  ggtitle("4 years")
+p1_8years <- epi_com_beta %>%
+  mutate(sample = "SAB_304_1X",
+         cpg_ids = "cg27182551,cg13431205,cg18481241,cg25676335,cg00059930,cg26740195") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p1_cord, p1_4years, p1_8years, nrow = 3)
+```
+
+This epimutation is observed at cord blood and 4 years, while at 8 years this individual still has the most extreme values. 
+
+
+```{r}
+epi_com_beta <- subset(com.res.df, idnum == "245" & method %in% c("beta", "barbosa"))
+
+p1_cord <- plot_epimutations(epi_com_beta[1,], gset.0) +
+  ggtitle("Cord Blood")
+p1_4years <- epi_com_beta %>%
+  mutate(sample = "04_245_4") %>%
+  plot_epimutations(methy = gset.4) +
+  ggtitle("4 years")
+plot_grid(p1_cord, p1_4years, nrow = 2)
+```
+
+
+
+```{r}
+epi_com_beta <- subset(com.res.df, idnum == "364" & method %in% c("beta", "barbosa"))
+
+p1_cord <- plot_epimutations(epi_com_beta[1,], gset.0) +
+  ggtitle("Cord Blood")
+p1_4years <- epi_com_beta %>%
+  mutate(sample = "04_364_4") %>%
+  plot_epimutations(methy = gset.4) +
+  ggtitle("4 years")
+plot_grid(p1_cord, p1_4years, nrow = 2)
+```
+
+These two epimutations are observed at cord blood and 4 years. However, these individuals are not present at 8 years.
+
+
+```{r}
+epi_com_beta2 <- subset(com.res.df, idnum == "519" & method %in% c("beta", "barbosa"))
+
+p2_cord <- plot_epimutations(epi_com_beta2[1,], gset.0) +
+  ggtitle("Cord Blood")
+p2_4years <- epi_com_beta2 %>%
+  mutate(sample = "04_519_4") %>%
+  plot_epimutations(methy = gset.4) +
+  ggtitle("4 years")
+p2_8years <- epi_com_beta2 %>%
+  mutate(sample = "SAB_519_1X") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p2_cord, p2_4years, p2_8years, nrow = 3)
+```
+
+This epimutation is observed at cord blood and 4 years, while at 8 years the individual have value similar to the population.
+
+```{r}
+epi_com_mlm <- subset(com.res.df, idnum == "356" & method == "mlm" & epi_region_id == "chr8_145637525")
+
+p3_cord <- plot_epimutations(epi_com_mlm[1,], gset.0) +
+  ggtitle("Cord Blood")
+p3_4years <- epi_com_mlm %>%
+  mutate(sample = "04_356_4") %>%
+  plot_epimutations(methy = gset.4) +
+  ggtitle("4 years")
+p3_8years <- epi_com_mlm %>%
+  mutate(sample = "SAB_356_1X") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p3_cord, p3_4years, p3_8years, nrow = 3)
+```
+
+The epimutation detected by mlm at the three time-points is not very clear.
+
+```{r}
+epi_com_manova <- subset(com.res.df, idnum == "235" & method == "manova" & epi_region_id == "chr11_117314243")
+
+p4_cord <- plot_epimutations(epi_com_manova[1,], gset.0) +
+  ggtitle("Cord Blood")
+p4_4years <- epi_com_manova %>%
+  mutate(sample = "04_235_4") %>%
+  plot_epimutations(methy = gset.4) +
+  ggtitle("4 years")
+p4_8years <- epi_com_manova %>%
+  mutate(sample = "SAB_235_1X") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p4_cord, p4_4years, p4_8years, nrow = 3)
+```
+
+This individual is consistently outlier but the difference is very small.
+
+
+# Residuals
+
+Second, we will compare the results obtained computing the epimutations in the dataset after applying the residuals.
+
+
+```{r}
+rm(list = ls())
+## 0 years
+load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
+
+## 4 years
+load("../INMA4.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
+
+
+## 8 years
+load("../results/epimutations/HELIX.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
+```
+
+```{r}
+make_res_df <- function(res.list, pheno, dataset){
+  nMethod <- sapply(res.list, nrow)
+  nMethod[sapply(nMethod, is.null)] <- 0
+  methods <- names(res.list)
+  names(methods) <- methods
+  Reduce(rbind, res.list) %>%
+    mutate(method = rep(methods, unlist(nMethod)),
+           dataset = dataset) %>%
+    left_join(pheno %>% 
+                data.frame() %>% 
+                select(Sample_Name, Sex, idnum) %>% 
+                mutate(sample = Sample_Name,
+                       idnum = as.character(idnum)), by = "sample")
+}
+make_sum_df <- function(res_df){
+  res_df %>%
+  group_by(method, sample, Sex, idnum, dataset) %>%
+  summarize(n = sum(start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
+  mutate(n_cat = ifelse(n > 1, "1+", as.character(n)))
+}
+
+```
+
+```{r}
+load("../INMA_comb.epimutations.allSamples.residuals.Rdata")
+load("../INMA4.epimutations.allSamples.residuals.Rdata")
+load("../results/epimutations/HELIX.epimutations.allSamples.residuals.Rdata")
+
+helixp <- colData(helix)
+helixp$idnum <- sapply(strsplit(helixp$SampleID, "_"), `[`, 2)
+helixp$Sex <- helixp$e3_sex
+helixp$Sample_Name <- helixp$SampleID
+
+res.inma0.df <- make_res_df(res.inma0.residuals.list, pheno = colData(inma0), dataset = "Cord Blood") 
+inma0.sum.df <- make_sum_df(res.inma0.df)
+
+
+res.inma4.df <- make_res_df(res.inma4.residuals.list, pheno = colData(inma4), dataset = "4 years") 
+inma4.sum.df <- make_sum_df(res.inma4.df)
+
+res.helix.df <- make_res_df(res.helix.residuals.list, pheno = helixp, dataset = "8 years") 
+helix.sum.df <- make_sum_df(res.helix.df)
+
+all.sum.df <- rbind(inma0.sum.df, inma4.sum.df, helix.sum.df) %>%
+  mutate(dataset = factor(dataset, levels = c("Cord Blood", "4 years", "8 years")))
+methods <- unique(all.sum.df$method)
+names(methods ) <- methods
+
+all.res.df <- rbind(res.inma0.df, res.inma4.df, res.helix.df) %>%
+  mutate(dataset = factor(dataset, levels = c("Cord Blood", "4 years", "8 years")))
+```
+
+```{r}
+all.sum.df %>%
+  ggplot(aes(x = n_cat)) +
+  geom_bar() +
+  theme_bw() +
+  facet_grid(dataset ~ method, scales = "free_y")
+
+sum.props <- lapply(methods, function(x) {
+  
+  sub <- subset(all.sum.df, method == x)
+   round(prop.table(table(sub$dataset, sub$n_cat), margin = 1)*100, 2)
+
+})
+sum.props
+```
+
+We observe the same trends than with the raw dataset, where at cord blood more children have more epimutations and more children have at least one epimutation.
+
+```{r}
+sab.sum.df <- subset(all.sum.df, dataset != "8 years" | grepl("SAB", sample))
+
+tab <- table(sab.sum.df$idnum)
+dup <- names(tab)[tab > 4]
+com.res.df <- subset(all.res.df, idnum %in% dup & chromosome != 0 & (is.na(pvalue) | pvalue < 0.05/40408))
+long_sum <- com.res.df %>%
+  group_by(idnum, method, epi_region_id) %>%
+  summarize(n_dataset = length(unique(dataset))) %>%
+  filter(n_dataset > 1) %>%
+  arrange(method)
+
+table(long_sum$method, long_sum$n_dataset)
+```
+
+After applying the residuals, we detected epimutations more constant along time-points. In this case, we also detect epimutaitons shared between 0 and 4 years with barbosa, more epimutations are common across two time-points in beta and even one is common in three time-points.
+
+
+```{r}
+epi_com_beta <- subset(com.res.df, idnum == "304" & method %in% c("beta", "barbosa"))
+
+p1_cord <- plot_epimutations(epi_com_beta[1,], inma0) +
+  ggtitle("Cord Blood")
+p1_4years <- epi_com_beta %>%
+  mutate(sample = "04_304_4") %>%
+  plot_epimutations(methy = inma4) +
+  ggtitle("4 years")
+p1_8years <- epi_com_beta %>%
+  mutate(sample = "SAB_304_1X",
+         cpg_ids = "cg27182551,cg13431205,cg18481241,cg25676335,cg00059930,cg26740195") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p1_cord, p1_4years, p1_8years, nrow = 3)
+```
+
+This epimutation was previously detected with beta at cord blood and 4 years in the raw dataset. With the residuals, is also detected by barbosa.
+
+
+
+```{r}
+epi_com_barbosa <- subset(com.res.df, idnum == "554" & method %in% c("beta", "barbosa") &
+                            epi_region_id == "chr16_832683")
+
+p2_cord <- plot_epimutations(epi_com_barbosa[1,], inma0) +
+  ggtitle("Cord Blood")
+p2_4years <- epi_com_barbosa %>%
+  mutate(sample = "04_554_4") %>%
+  plot_epimutations(methy = inma4) +
+  ggtitle("4 years")
+p2_8years <- epi_com_barbosa %>%
+  mutate(sample = "SAB_554_1X",
+         cpg_ids = "cg11470442,cg03220734,cg08581018,cg02485642,cg08931647") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p2_cord, p2_4years, p2_8years, nrow = 3)
+```
+
+This epimutation is observed at cord blood and 4 years, while at 8 years the individual have value similar to the population.
+
+```{r}
+epi_com_beta2 <- subset(com.res.df, idnum == "294" & method %in% c("beta", "barbosa") &
+                         epi_region_id == "chr8_42234243")
+
+p3_cord <- plot_epimutations(epi_com_beta2[1,], inma0) +
+  ggtitle("Cord Blood")
+p3_4years <- epi_com_beta2 %>%
+  mutate(sample = "04_294_4") %>%
+  plot_epimutations(methy = inma4) +
+  ggtitle("4 years")
+p3_8years <- epi_com_beta2 %>%
+  mutate(sample = "SAB_294_1X") %>%
+  plot_epimutations(methy = helix) +
+  ggtitle("8 years")
+plot_grid(p3_cord, p3_4years, p3_8years, nrow = 3)
+```
+
+This epimutation is clearer at 0 and 4 years than at 8 years.
