@@ -25,9 +25,9 @@ load("../INMA0combined.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicR
 INMA_ind <- gset
 load("../INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
 INMA_comb <- gset
-load("../INMA0combined.epimutations.INMA0.duplicates.Rdata")
+load("../results/epimutations/INMA0combined.epimutations.INMA0.duplicates.Rdata")
 res_ind <- res
-load("../INMA_comb.epimutations.INMA0.duplicates.Rdata")
+load("../results/epimutations/INMA_comb.epimutations.INMA0.duplicates.Rdata")
 res_comb <- res
 ```
 
@@ -404,7 +404,7 @@ overlapsEsteller.df <- overlapsEsteller %>%
   t() %>%
   cbind(combids) %>%
   tibble() %>%
-  filter(!(Common == 0 & independent == 0 & joint == 0)) 
+  filter(!(common == 0 & independent == 0 & joint == 0)) 
 
 
 overlapsEsteller.df %>%

@@ -21,7 +21,7 @@ gset.sab <- gset.4[, grep("^04|SAB", gset.4$Sample_Name)]
 ## Remove duplicates
 inma4 <- gset.sab[, !duplicated(gset.sab$idnum)]
 
-methods <- c("beta", "barbosa", "mlm", "manova")
+methods <- names(epi_parameters())
 names(methods) <- methods
 
 res.inma4.list <- lapply(methods, epimutations_one_leave_out, methy = inma4, 

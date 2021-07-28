@@ -5,18 +5,13 @@
 #'#################################################################################
 #'#################################################################################
 
-## Capture arguments
-args <- commandArgs(trailingOnly=TRUE)
-gsetPath1 <- args[1]
-gsetPath2 <- args[2]
-
 ## Load libraries
 library(minfi)
 
-load(gsetPath1)
+load("INMA0combined.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
 gset.1 <- gset
 
-load(gsetPath2)
+load("INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
 gset.2 <- gset
 
 

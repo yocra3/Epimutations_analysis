@@ -15,7 +15,13 @@ library(limma)
 load("INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
 
 ## Remove duplicates
-inma0 <- gset[, !(gset$dup & gset$Batch == "MeDALL")]
+### Same batch replicates
+gset.un <- gset[ , !grepl("duplicate|Rep1", colnames(gset))]
+
+### Different batch replicates
+dups <- gset.un$idnum[duplicated(gset.un$idnum)]
+gset.un$dup2 <- gset.un$idnum %in% dups 
+inma0 <- gset.un[, !(gset.un$dup2 & gset.un$Batch == "MeDALL")]
 
 ## Compute residuals of pcs
 pcs <- meffil.methylation.pcs(getBeta(inma0), probe.range = 40000)
@@ -25,13 +31,12 @@ beta <- ilogit2(res)
 assay(inma0) <- beta
 save(inma0, file = "INMA_comb.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
 
-
-methods <- c("beta", "barbosa", "mlm", "manova")
+methods <- names(epi_parameters())
 names(methods) <- methods
 
 res.inma0.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma0, 
                          BPPARAM = MulticoreParam(10, progressbar = TRUE))
-save(res.inma0.residuals.list, file = "INMA_comb.epimutations.allSamples.residuals.Rdata")
+save(res.inma0.residuals.list, file = "results/epimutations/INMA_comb.epimutations.allSamples.residuals.Rdata")
 
 ## Sex ####
 inma0.boys <- inma0[, inma0$Sex == "M"]
@@ -55,6 +60,6 @@ save(res.inma0.esteller.residuals.list, file = "INMA_comb.epimutations.esteller.
 
 inma0.medall <- inma0[, inma0$Batch == "MeDALL"]
 res.inma0.medall.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.medall, 
-                               BPPARAM = MulticoreParam(10, progressbar = TRUE))
+                               BPPARAM = MulticoreParam(20, progressbar = TRUE))
 save(res.inma0.medall.residuals.list, file = "INMA_comb.epimutations.medall.residuals.Rdata")
 

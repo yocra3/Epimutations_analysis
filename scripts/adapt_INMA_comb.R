@@ -8,15 +8,11 @@
 #'#################################################################################
 #'#################################################################################
 
-## Capture arguments
-args <- commandArgs(trailingOnly=TRUE)
-gset <- args[1]
-
 ## Load libraries ####
 library(minfi)
 
 ## Load GRS
-load(gset)
+load("INMA_comb.normalizedComBat.GenomicRatioSet.Rdata")
 
 ## Select Age 0 samples
 gset.0 <- gset[, gset$Sample_Group == "Age_0"]
@@ -28,8 +24,5 @@ gset.sab <- gset.0[, grep("^04|SAB", gset.0$Sample_Name)]
 ## mark duplciated samples
 dups <- gset.sab$idnum[duplicated(gset.sab$idnum)]
 gset.sab$dup <- gset.sab$idnum %in% dups 
-
-## Remove technical duplicates
-gset <- gset.sab[, !gset.sab$Sample_Name %in% c("04_561_0_duplicate", "04_287_0_duplicate", "SAB_C_0636_Rep1")]
-
+gset <- gset.sab
 save(gset, file = "INMA_comb.normalizedComBat.GenomicRatioSet.corrected.Rdata")
