@@ -50,7 +50,7 @@ dp <- meffil.load.detection.pvalues(qc.objects)
 gset <- ori
 dp.f <- dp[rownames(gset), colnames(gset)]
 
-beta <- getBeta(gset)
+beta <- assay(gset)
 beta[dp.f > 2e-16] <- NA
 assay(gset) <- beta
 save(gset, file = paste0(outPrefix, ".normalizedComBat.allCpGs.withNA.GenomicRatioSet.Rdata"))

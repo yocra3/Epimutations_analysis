@@ -23,9 +23,10 @@ inma0 <- gset.un[, !(gset.un$dup2 & gset.un$Batch == "MeDALL")]
 
 methods <- names(epi_parameters())
 names(methods) <- methods
+methods <- methods[methods != "mahdistmcd"]
 
 res.inma0.list <- lapply(methods, epimutations_one_leave_out, methy = inma0, 
-                         BPPARAM = MulticoreParam(20, progressbar = TRUE))
+                         BPPARAM = MulticoreParam(7, progressbar = TRUE))
 save(res.inma0.list, file = "results/epimutations/INMA_comb.epimutations.allSamples.Rdata")
 
 ## Sex ####
@@ -44,12 +45,12 @@ save(res.inma0.girls.list, file = "INMA_comb.epimutations.girls.Rdata")
 ## Batch ####
 inma0.esteller <- inma0[, inma0$Batch == "Esteller"]
 res.inma0.esteller.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.esteller, 
-                              BPPARAM = MulticoreParam(20, progressbar = TRUE))
+                              BPPARAM = MulticoreParam(10, progressbar = TRUE))
 save(res.inma0.esteller.list, file = "results/epimutations/INMA_comb.epimutations.esteller.Rdata")
 
 
 inma0.medall <- inma0[, inma0$Batch == "MeDALL"]
 res.inma0.medall.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.medall, 
-                               BPPARAM = MulticoreParam(20, progressbar = TRUE))
+                               BPPARAM = MulticoreParam(10, progressbar = TRUE))
 save(res.inma0.medall.list, file = "results/epimutations/INMA_comb.epimutations.medall.Rdata")
 

@@ -134,7 +134,7 @@ barbosa_comb <- barbosa_comb %>%
          dir_l = strsplit(outlier_direction, ",")) %>%
   unnest(c(samp_l, dir_l))
 
-barbosa_r <- res.GSE84727.list$barbosa
+barbosa_r <- res.GSE84727.list$quantile
 barbosa_r_filt <- subset(barbosa_r, chromosome != 0)
 
 
@@ -157,12 +157,10 @@ overlap_R <- sapply(seq_len(length(barbosa_r_GR)), function(i){
 
 GSE84727.comb <- Reduce(rbind, res.GSE84727.list)
 GSE84727.comb$method <- rep(names(res.GSE84727.list), sapply(res.GSE84727.list, nrow))
-## Filter isoforest -> Remove in future
-GSE84727.comb <- subset(GSE84727.comb, !(method == "isoforest" & outlier_score < 0.7))
 
 barbosa_comb$outlier_direction <- barbosa_comb$dir_l
 barbosa_comb$sample <- barbosa_comb$samp_l
-barbosa_comb$method <- "garg"
+barbosa_comb$method <- "quantile-perl"
 
 ## Add lines for samples without epimutations
 no_samps <- setdiff(unique(GSE84727.comb$sample), unique(barbosa_comb$sample))
@@ -176,13 +174,17 @@ barbosa_comb <- rbind(barbosa_comb, data.frame(chromosome = 0,
                                               samp_l = no_samps,
                                               dir_l = NA,
                                               sample = no_samps,
-                                              method = "garg"  ))
+                                              method = "quantile-perl"))
 
 ## Merge
 sel_cols <- c("sample", "chromosome", "start", "end", "cpg_ids", "method")
 GSE84727.comb <- rbind(GSE84727.comb[, sel_cols], barbosa_comb[, sel_cols])
 GSE84727.comb$method <- factor(GSE84727.comb$method, 
-                               levels = c("garg", "barbosa", "beta", "manova", "mlm", "isoforest", "mahdistmcd"))
+                               levels = c("quantile-perl", "quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd"))
+
+levels(GSE84727.comb$method)[levels(GSE84727.comb$method)=="quantile"] <- "quantile-R"
+levels(GSE84727.comb$method)[levels(GSE84727.comb$method)=="isoforest"] <- "iForest"
+levels(GSE84727.comb$method)[levels(GSE84727.comb$method)=="mahdistmcd"] <- "mah-dist"
 
 # Plots ####
 ## Total epimutations per method ####
@@ -190,26 +192,15 @@ GSE84727.comb %>%
   group_by(method) %>%
   summarize(n = sum(chromosome != 0))
 
-p_n <- GSE84727.comb %>%
-  group_by(method) %>%
-  summarize(n = sum(chromosome != 0)) %>%
-  ggplot(aes(x = method, y = n, fill = method)) +
-  geom_bar(stat = "identity") + theme_bw()
-png("figures/GSE84727_num_epimut.png")
-p_n
-dev.off()
-
-
-
 ## Proportion of samples with epimutations ####
 p_samp_prop <- GSE84727.comb %>%
   group_by(method, sample) %>%
   summarize(n = sum(chromosome != 0)) %>%
   group_by(method) %>%
   summarize(prop = mean(n > 0)) %>%
-  ggplot(aes(x = method, y = prop*100, fill = method)) +
+  ggplot(aes(x = method, y = prop*100)) +
   geom_bar(stat = "identity") + theme_bw() +
-  ylim(c(0, 100))
+  scale_y_continuous(name = "Samples with epimutations (%)", limits = c(0, 100))
 png("figures/GSE84727_epimut_samp_prop.png")
 p_samp_prop
 dev.off()
@@ -241,40 +232,58 @@ GSE84727.comb %>%
   summary()
 
 
-png("figures/GSE84727_epimut_samp_dist.png")
-GSE84727.comb %>%
-  group_by(method, sample) %>%
-  summarize(n = sum(chromosome != 0)) %>%
-  ggplot(aes(x = method, y = n, fill = method)) +
-  geom_boxplot() +
-  theme_bw()
-dev.off()
-
-
+# png("figures/GSE84727_epimut_samp_dist.png")
+# GSE84727.comb %>%
+#   group_by(method, sample) %>%
+#   summarize(n = sum(chromosome != 0)) %>%
+#   ggplot(aes(x = method, y = n, fill = method)) +
+#   geom_boxplot() +
+#   theme_bw()
+# dev.off()
+# 
+# 
+# p_samp_dist <- GSE84727.comb %>%
+#   group_by(method, sample) %>%
+#   summarize(n = sum(chromosome != 0)) %>%
+#   ungroup() %>%
+#   mutate(n_wind = ifelse(n > quantile(n, 0.98), quantile(n, 0.98), n)) %>%
+#   ggplot(aes(x = method, y = n_wind, fill = method)) +
+#   geom_boxplot() +
+#   theme_bw()
+# png("figures/GSE84727_epimut_samp_dist_winsor.png")
+# p_samp_dist
+# dev.off()
+#   
 p_samp_dist <- GSE84727.comb %>%
   group_by(method, sample) %>%
   summarize(n = sum(chromosome != 0)) %>%
-  ungroup() %>%
-  mutate(n_wind = ifelse(n > quantile(n, 0.98), quantile(n, 0.98), n)) %>%
-  ggplot(aes(x = method, y = n_wind, fill = method)) +
-  geom_boxplot() +
+  mutate(n_cat = ifelse(n == 0, "0",
+                        ifelse(n < 6, "1-5",
+                               ifelse(n < 10, "6-10", "10+"))),
+         n_cat = factor(n_cat, levels = c("0", "1-5", "6-10", "10+"))) %>%
+  count(method, n_cat) %>% 
+  complete(method, n_cat, fill = list(n = 0)) %>%
+  ggplot(aes(fill = n_cat, color = n_cat, y = n, x=method)) + 
+  geom_bar(stat="identity") +
+  scale_fill_discrete(name = "Epimutations per sample") +
+  scale_color_discrete(name = "Epimutations per sample") +
   theme_bw()
-png("figures/GSE84727_epimut_samp_dist_winsor.png")
+
+png("figures/GSE84727_epimut_samp_dist_stacked.png", width = 800, height = 400)
 p_samp_dist
 dev.off()
-  
 
-png("figures/GSE84727_epimut_samp_dist_winsor_episamps.png")
-GSE84727.comb %>%
-  group_by(method, sample) %>%
-  summarize(n = sum(chromosome != 0)) %>%
-  ungroup() %>%
-  mutate(n_wind = ifelse(n > quantile(n, 0.98), quantile(n, 0.98), n)) %>%
-  filter(n > 0) %>%
-  ggplot(aes(x = method, y = n_wind, fill = method)) +
-  geom_boxplot() +
-  theme_bw()
-dev.off()
+# png("figures/GSE84727_epimut_samp_dist_winsor_episamps.png")
+# GSE84727.comb %>%
+#   group_by(method, sample) %>%
+#   summarize(n = sum(chromosome != 0)) %>%
+#   ungroup() %>%
+#   mutate(n_wind = ifelse(n > quantile(n, 0.98), quantile(n, 0.98), n)) %>%
+#   filter(n > 0) %>%
+#   ggplot(aes(x = method, y = n_wind, fill = method)) +
+#   geom_boxplot() +
+#   theme_bw()
+# dev.off()
 
 ## Overlap between methods ####
 ### Add predefined epimutations regions
@@ -298,21 +307,22 @@ upset(fromList(upset.list), sets = methods, order.by = "freq",
       text.scale = c(1.7, 1.7, 1.2, 1.2, 2, 1.4))
 dev.off()
 
-upset <- ggdraw() + draw_image("./figures/GSE84727_epimut_method_overlaps.png")
 
-png("figures/GSE84727_epimut_panel.png", width = 1000, height = 700)
-plot_grid(p_n, p_samp_prop, p_samp_dist, upset, labels = "AUTO", nrow = 2)
-dev.off()
-
-sapply(names(upset.list), function(x) 
-  length(intersect(upset.list[[x]], unlist(upset.list[names(upset.list) != x])))/length(unique(upset.list[[x]])))
-
-sapply(names(upset.list)[4:7], function(x) 
-  length(intersect(upset.list[[x]], unlist(upset.list[names(upset.list) != x])))/length(unique(upset.list[[x]])))
-
-png("figures/GSE84727_epimut_method_overlaps_top.png", width = 1000, height = 700)
-upset(fromList(upset.list), sets = methods[4:7], order.by = "freq",
-      mainbar.y.label = "Common epimutations", 
-      sets.x.label = "Epimutations per method", 
-      text.scale = c(1.7, 1.7, 1.2, 1.2, 2, 1.4))
-dev.off()
+# upset <- ggdraw() + draw_image("./figures/GSE84727_epimut_method_overlaps.png")
+# 
+# png("figures/GSE84727_epimut_panel.png", width = 1000, height = 700)
+# plot_grid(p_n, p_samp_prop, p_samp_dist, upset, labels = "AUTO", nrow = 2)
+# dev.off()
+# 
+# sapply(names(upset.list), function(x) 
+#   length(intersect(upset.list[[x]], unlist(upset.list[names(upset.list) != x])))/length(unique(upset.list[[x]])))
+# 
+# sapply(names(upset.list)[4:7], function(x) 
+#   length(intersect(upset.list[[x]], unlist(upset.list[names(upset.list) != x])))/length(unique(upset.list[[x]])))
+# 
+# png("figures/GSE84727_epimut_method_overlaps_top.png", width = 1000, height = 700)
+# upset(fromList(upset.list), sets = methods[4:7], order.by = "freq",
+#       mainbar.y.label = "Common epimutations", 
+#       sets.x.label = "Epimutations per method", 
+#       text.scale = c(1.7, 1.7, 1.2, 1.2, 2, 1.4))
+# dev.off()

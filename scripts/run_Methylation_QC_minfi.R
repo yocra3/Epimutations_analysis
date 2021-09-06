@@ -9,12 +9,11 @@
 #'#################################################################################
 
 # Capture arguments ####
-args <- commandArgs(trailingOnly=TRUE)
-idatsFold <-  args[1]
-phenoPath <- args[2]
-badSamplesPath <- args[3]
-badProbesPath <- args[4]
-outPrefix <- args[5]
+idatsFold <- "data/IDATs_Esteller"
+phenoPath <- "results/preprocess/phenotypes/INMA_phenotypes.Rdata"
+badSamplesPath <- "Esteller.removed.samples.txt"
+badProbesPath <- "Esteller.removed.probes.txt"
+outPrefix <- "Esteller"
 
 # Load libraries and data ####
 library(minfi)
@@ -59,7 +58,7 @@ save(gset, file = paste0(outPrefix, ".minfiSWANNormalization.normalizedRaw.Genom
 rm(mset, gset)
 
 ## Quantile normalization
-gset <- preprocessQuantile(RGset)
+gset <- preprocessQuantile(RGset, fixOutliers = FALSE)
 save(gset, file = paste0(outPrefix, ".minfiQuantileNormalization.normalizedRaw.GenomicRatioSet.Rdata"))
 rm(mset, gset)
 

@@ -41,4 +41,4 @@ wget https://ars.els-cdn.com/content/image/1-s2.0-S0002929720302883-mmc4.xlsx
 mv 1-s2.0-S0002929720302883-mmc4.xlsx Epimutations.PMID32937144.xlsx
 chmod 444 Epimutations.PMID32937144.xlsx
 
-rsync -azvh . ~/data/WS_HELIX/HELIX_analyses/epimutations_CR/
+rsync -azvh --progress . ~/data/WS_HELIX/HELIX_analyses/epimutations_CR/

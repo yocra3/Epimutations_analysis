@@ -15,8 +15,9 @@ load("results/preprocess/HELIX/HELIX.withNA.GenomicRatioSet.Rdata")
 ## Remove MOBA and non-European
 helix <- gset[, gset$cohort != "MOBA" & gset$h_ethnicity_3cat == "WhiteEur_WhiteOther"]
 
-methods <- c("beta", "barbosa", "mlm", "manova")
+methods <- names(epi_parameters())
 names(methods) <- methods
+methods <- methods[methods != "mahdistmcd"]
 
 res.helix.list <- lapply(methods, epimutations_one_leave_out, methy = helix, 
                          BPPARAM = MulticoreParam(3))
@@ -31,7 +32,7 @@ save(res.helix.boys.list, file = "results/epimutations/HELIX.epimutations.boys.R
 
 helix.girls <- helix[, helix$e3_sex == "female"]
 res.helix.girls.list <- lapply(methods, epimutations_one_leave_out, methy = helix.girls, 
-                               BPPARAM = MulticoreParam(10))
+                               BPPARAM = MulticoreParam(3))
 save(res.helix.girls.list, file = "results/epimutations/HELIX.epimutations.girls.Rdata")
 
 ## Cohort
@@ -41,6 +42,6 @@ names(cohort) <- cohort
 res.helix.cohort.list <- lapply(cohort, function(x){
   helix.sub <- helix[, helix$cohort == x]
   lapply(methods, epimutations_one_leave_out, methy = helix.sub, 
-         BPPARAM = MulticoreParam(10))
+         BPPARAM = MulticoreParam(3))
 })
 save(res.helix.cohort.list, file = "results/epimutations/HELIX.epimutations.cohort.Rdata")
