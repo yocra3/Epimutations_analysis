@@ -23,3 +23,8 @@ Rscript bin/createGenomicRatioSets.R INMA0combined.normalizedComBat.GenomicRatio
 
 ## Medall
 Rscript workflows/bin/createGenomicRatioSets.R MeDALL_all.normalizedComBat.GenomicRatioSet.Rdata MeDALL_all.qc.objects.clean.Rdata data/HM450.hg19.manifest.rds MeDALL_all
+
+## No ComBat
+Rscript bin/createGenomicRatioSets_Raw.R INMA_comb.normalizedRaw.GenomicRatioSet.corrected.Rdata INMA_comb.qc.objects.round1.Rdata data/HM450.hg19.manifest.rds INMA_comb.normalizedRaw
+Rscript bin/createGenomicRatioSets_Raw.R MeDALL_all.normalizedRaw.GenomicRatioSet.Rdata MeDALL_all.qc.objects.clean.Rdata data/HM450.hg19.manifest.rds MeDALL_all.normalizedRaw
+Rscript bin/createGenomicRatioSets_Raw.R INMA0combined.normalizedRaw.GenomicRatioSet.Rdata INMA_comb.qc.objects.round1.Rdata data/HM450.hg19.manifest.rds INMA0combined.normalizedRaw

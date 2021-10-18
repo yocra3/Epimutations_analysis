@@ -22,3 +22,19 @@ beta <- getBeta(gset)
 beta[dp.f > 2e-16] <- NA
 assay(gset) <- beta
 save(gset, file = "results/preprocess/HELIX/HELIX.withNA.GenomicRatioSet.Rdata")
+
+## No Combat dataset
+load("data/HELIX.detectionPvals.Rdata")
+load("data/HELIX.noCombat.GenomicRatioSet.Rdata")
+
+gset <- methylome_subcohort
+
+map <- colData(gset)[, c("arrayName", "SampleID")]
+rownames(map) <- map$arrayName
+colnames(detP) <- map[colnames(detP), "SampleID"]
+dp.f <- detP[rownames(gset), colnames(gset)]
+
+beta <- getBeta(gset)
+beta[dp.f > 2e-16] <- NA
+assay(gset) <- beta
+save(gset, file = "results/preprocess/HELIX/HELIX.raw.withNA.GenomicRatioSet.Rdata")

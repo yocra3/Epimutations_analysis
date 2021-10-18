@@ -26,3 +26,21 @@ dups <- gset.sab$idnum[duplicated(gset.sab$idnum)]
 gset.sab$dup <- gset.sab$idnum %in% dups 
 gset <- gset.sab
 save(gset, file = "INMA_comb.normalizedComBat.GenomicRatioSet.corrected.Rdata")
+
+## Repeat for dataset without ComBat
+
+## Load GRS
+load("INMA_comb.normalizedRaw.GenomicRatioSet.Rdata")
+
+## Select Age 0 samples
+gset.0 <- gset[, gset$Sample_Group == "Age_0"]
+
+## Select INMA SAB samples
+gset.sab <- gset.0[, grep("^04|SAB", gset.0$Sample_Name)]
+
+
+## mark duplciated samples
+dups <- gset.sab$idnum[duplicated(gset.sab$idnum)]
+gset.sab$dup <- gset.sab$idnum %in% dups 
+gset <- gset.sab
+save(gset, file = "INMA_comb.normalizedRaw.GenomicRatioSet.corrected.Rdata")

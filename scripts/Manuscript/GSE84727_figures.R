@@ -263,6 +263,7 @@ p_samp_dist <- GSE84727.comb %>%
          n_cat = factor(n_cat, levels = c("0", "1-5", "6-10", "10+"))) %>%
   count(method, n_cat) %>% 
   complete(method, n_cat, fill = list(n = 0)) %>%
+  distinct() %>%
   ggplot(aes(fill = n_cat, color = n_cat, y = n, x=method)) + 
   geom_bar(stat="identity") +
   scale_fill_discrete(name = "Epimutations per sample") +
