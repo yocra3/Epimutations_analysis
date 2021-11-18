@@ -37,6 +37,8 @@ ln -s $HOME/data/WS_HELIX/HELIX_preproc/methylation/Final_data/methylome_subcoho
 ln -s $HOME/data/WS_HELIX/HELIX_preproc/exposome/FinalDataset/imppostnatal_v3.Rdata data/postExposome.Rdata
 ln -s $HOME/data/WS_HELIX/HELIX_preproc/exposome/FinalDataset/imppregnancy_v3.Rdata data/pregExposome.Rdata
 
+## Add eQTM catalogue
+ln -s $HOME/data/WS_HELIX/HELIX_analyses/expr_met_SM/HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells_SIG.txt.gz data/eqtm.txt.gz
 
 ## Download CREs from ENCODE
 wget https://api.wenglab.org/screen_v13/fdownloads/GRCh38-ccREs.bed
@@ -45,5 +47,8 @@ wget https://api.wenglab.org/screen_v13/fdownloads/GRCh38-ccREs.bed
 wget https://ars.els-cdn.com/content/image/1-s2.0-S0002929720302883-mmc4.xlsx
 mv 1-s2.0-S0002929720302883-mmc4.xlsx Epimutations.PMID32937144.xlsx
 chmod 444 Epimutations.PMID32937144.xlsx
+
+## 
+wget https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE168739&format=file
 
 rsync -azvh --progress . ~/data/WS_HELIX/HELIX_analyses/epimutations_CR/

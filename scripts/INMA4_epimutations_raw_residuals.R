@@ -49,3 +49,23 @@ inma4.girls <- inma4[, inma4$Sex == "F"]
 res.inma4.girls.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma4.girls, 
                               BPPARAM = MulticoreParam(10, progressbar = TRUE))
 save(res.inma4.girls.residuals.list, file = "results/epimutations/INMA4.epimutations.girls.residuals.Rdata")
+
+
+### Use as reference the other sex
+res.inma4.boys.girlsref.residuals.list <- mclapply(methods, epimutations, 
+                                                   case_samples = inma4.boys, 
+                                                   control_panel = inma4.girls, mc.cores = 3)
+save(res.inma4.boys.girlsref.residuals.list, file = "results/epimutations/INMA4combined.raw.epimutations.boys.girlsref.residuals.Rdata")
+
+res.inma4.girls.boysref.residuals.list <- mclapply(methods, epimutations, 
+                                                   case_samples = inma4.girls, 
+                                                   control_panel = inma4.boys, mc.cores = 3)
+save(res.inma4.girls.boysref.residuals.list, file = "results/epimutations/INMA4combined.raw.epimutations.girls.boysref.residuals.Rdata")
+
+
+## Smoking ####
+res.inma4.smoking.residuals.list <- mclapply(methods, epimutations, 
+                                             case_samples = inma4[ , !is.na(inma4$msmk) & inma4$msmk != "no smoking"], 
+                                             control_panel =  inma4[ , !is.na(inma4$msmk) &  inma4$msmk == "no smoking"],
+                                             mc.cores = 3)
+save(res.inma4.smoking.residuals.list, file = "results/epimutations/INMA4combined.raw.epimutations.smoking.residuals.Rdata")

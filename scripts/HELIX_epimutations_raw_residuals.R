@@ -47,6 +47,19 @@ res.helix.girls.residuals.list <- lapply(methods, epimutations_one_leave_out, me
                                BPPARAM = MulticoreParam(10))
 save(res.helix.girls.residuals.list, file = "results/epimutations/HELIX.epimutations.raw.girls.residuals.Rdata")
 
+### Use as reference the other sex
+res.helix.boys.girlsref.residuals.list <- mclapply(methods, epimutations, 
+                                                   case_samples = helix.boys, 
+                                                   control_panel = helix.girls, mc.cores = 3)
+save(res.helix.boys.girlsref.residuals.list, file = "results/epimutations/HELIX.epimutations.raw.boys.girlsref.residuals.Rdata")
+
+res.helix.girls.boysref.residuals.list <- mclapply(methods, epimutations, 
+                                                   case_samples = helix.girls, 
+                                                   control_panel = helix.boys, mc.cores = 3)
+save(res.helix.girls.boysref.residuals.list, file = "results/epimutations/HELIX.epimutations.raw.girls.boysref.residuals.Rdata")
+
+
+
 ## Cohort
 cohort <- unique(helix$cohort)
 names(cohort) <- cohort
@@ -57,3 +70,19 @@ res.helix.cohort.residuals.list <- lapply(cohort, function(x){
          BPPARAM = MulticoreParam(10))
 })
 save(res.helix.cohort.residuals.list, file = "results/epimutations/HELIX.epimutations.raw.cohort.residuals.Rdata")
+
+
+### Smoking ####
+helix_smk <- read.table("~/data/WS_HELIX/HELIX_analyses/PGRS_smok_GF/db/HELIX_smok.txt", header = TRUE)
+helix_smk <- helix_smk[!duplicated(helix_smk$HelixID), ]
+helix_smk <- subset(helix_smk, HelixID %in% helix$HelixID)
+helix_map <- colData(helix)[, c("HelixID", "SampleID")]
+rownames(helix_map) <- helix_map$HelixID
+rownames(helix_smk) <- helix_map[helix_smk$HelixID, "SampleID"]
+
+helix$smoking <- helix_smk[colnames(helix), "msmok_a"]
+res.helix.smoking.residuals.list <- mclapply(methods, epimutations, 
+                                             case_samples = helix[ , !is.na(helix$smoking) & helix$smoking == 1], 
+                                             control_panel =  helix[ , !is.na(helix$smoking) &  helix$smoking == 0],
+                                             mc.cores = 3)
+save(res.helix.smoking.residuals.list, file = "results/epimutations/HELIX.epimutations.raw.smoking.residuals.Rdata")
