@@ -48,7 +48,16 @@ wget https://ars.els-cdn.com/content/image/1-s2.0-S0002929720302883-mmc4.xlsx
 mv 1-s2.0-S0002929720302883-mmc4.xlsx Epimutations.PMID32937144.xlsx
 chmod 444 Epimutations.PMID32937144.xlsx
 
-## 
-wget https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE168739&format=file
+## Extract GSE168739
+mkdir data/GSE168739
+tar -xvf data/GSE168739_RAW.tar -C data/GSE168739
+
+## Extract GSE51032
+mkdir data/GSE51032
+tar -xvf data/GSE51032_RAW.tar -C data/GSE51032
+
+## Extract GSE51032
+mkdir data/GSE51032
+tar -xvf data/GSE51032_RAW.tar -C data/GSE51032
 
 rsync -azvh --progress . ~/data/WS_HELIX/HELIX_analyses/epimutations_CR/
