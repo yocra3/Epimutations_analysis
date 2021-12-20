@@ -315,9 +315,10 @@ genesTSS <- lapply(res.gse87650.cc.tss$cpg_ids, function(x){
 
 ### Explore genes ####
 library(disgenet2r)
+pass <- ""
 disgenet_api_key <- get_disgenet_api_key(
   email = "carlos.ruiza@upf.edu", 
-  password = "disgenet2806" )
+  password = pass )
 Sys.setenv(DISGENET_API_KEY= disgenet_api_key)
 
 res_df <- Reduce(rbind, lapply(unique(unlist(genesTSS)), function(x) {
