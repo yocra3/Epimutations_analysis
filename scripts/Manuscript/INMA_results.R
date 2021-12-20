@@ -2006,32 +2006,30 @@ all.prop.gexp.mod2 <- lapply(c("4 years", "8 years"), function(a) {
 # summary(lm(abs(Zscore) ~ n_cat, pac, subset = method == "mlm"))  
 
 
-## Export epimtuations with gene expresion ####
-gexp_res_list <- list(`4 years` = subset(res.inma4.filt[, c(20, 16, 13, 3:5, 7, 25, 11, 28:29, 33, 26:27, 34, 30:32)], 
+## Export epimutations with gene expresion ####
+cols <- c("idnum", "method", "epi_region_id", "chromosome",	"start", "end", "cpg_n",
+          "mean_diff", "eqtm_out", "eqtm_z", "eqtm_rank", "eqtm_gene", "tss_out",
+          "tss_z", "tss_rank", "tss_gene", "near_out", "near_z", "near_rank", "near_gene")
+gexp_res_list <- list(`4 years` = subset(res.inma4.filt[, cols], 
                                          !is.na(tss_z) | !is.na(eqtm_z) | !is.na(near_z)),
-                      `8 years` = subset(res.helix.filt[, c(20, 16, 13, 3:5, 7, 23, 11, 28:29, 34, 25:26, 33, 30:32)], 
+                      `8 years` = subset(res.helix.filt[, cols], 
                                          !is.na(tss_z) | !is.na(eqtm_z) | !is.na(near_z)))
 
 writexl::write_xlsx(gexp_res_list, path = "tables/INMA.Epimutations.geneExp.xlsx")
 
 ## Overlap with obesity genes
 
-library(disgenet)
-pass <- pass
+library(disgenet2r)
+pass <- ""
 disgenet_api_key <- get_disgenet_api_key(
   email = "carlos.ruiza@upf.edu", 
-  password = "" )
+  password = pass )
 Sys.setenv(DISGENET_API_KEY= disgenet_api_key)
 
 
-
-
 obe_genes <- read_delim("data/obesity_genes.txt", delim = "\t", col_names = FALSE)
-helix.epi.gexp <- subset(res.helix.filt[, c(2, 20, 16, 13, 3:5, 7, 23, 11, 28:29, 34, 25:26, 33, 30:32)], 
-       !is.na(tss_z) | !is.na(eqtm_z) | !is.na(near_z))
-helix.epi.gexp <- subset(helix.epi.gexp, (abs(eqtm_z) > 2 & (eqtm_rank < 10 | eqtm_rank > 1010)) | 
-                           (abs(tss_z) > 2 & (tss_rank < 10 | tss_rank > 1010)) | 
-                           (abs(near_z) > 2 & (near_rank < 10 | near_rank > 1010)))
+helix.epi.gexp <- subset(res.helix.filt[, cols], !is.na(tss_z) | !is.na(eqtm_z) | !is.na(near_z))
+helix.epi.gexp <- subset(helix.epi.gexp, eqtm_out | tss_out | near_out)
 helix.epi.gexp$eqtm_symbol <- fData(helix.gexp)[helix.epi.gexp$eqtm_gene, "GeneSymbolDB2"]  
 helix.epi.gexp$tss_symbol <- fData(helix.gexp)[helix.epi.gexp$tss_gene, "GeneSymbolDB2"]  
 helix.epi.gexp$near_symbol <- fData(helix.gexp)[helix.epi.gexp$near_gene, "GeneSymbolDB2"]  
@@ -2039,15 +2037,10 @@ helix.epi.gexp$near_symbol <- fData(helix.gexp)[helix.epi.gexp$near_gene, "GeneS
 helix.epi.filt <- subset(helix.epi.gexp, (!is.na(eqtm_symbol) & eqtm_symbol != "") | 
                            (!is.na(tss_symbol) & tss_symbol != "") | 
                            (!is.na(near_symbol) & near_symbol != ""))
-selgenes <- c(subset(helix.epi.filt, abs(eqtm_z) > 2)$eqtm_symbol, 
-              subset(helix.epi.filt, abs(tss_z) > 2)$tss_symbol, 
-              subset(helix.epi.filt, abs(near_z) > 2)$near_symbol)
+selgenes <- c(helix.epi.filt$eqtm_symbol, 
+              helix.epi.filt$tss_symbol, 
+              helix.epi.filt$near_symbol)
 selgenes <- unique(selgenes)
-
-helix.epi.obe <- subset(helix.epi.gexp, sample %in% obe)
-selgenes2 <- c(helix.epi.obeX1)$eqtm_symbol, 
-              subset(helix.epi.obe, tss_symbol %in% obe_genes$X1)$tss_symbol, 
-              subset(helix.epi.obe, near_symbol %in% obe_genes$X1)$near_symbol)
 
 res_df <- Reduce(rbind, lapply(selgenes, function(x) {
   res <- gene2disease(gene = x)
@@ -2058,7 +2051,12 @@ res_df <- Reduce(rbind, lapply(selgenes, function(x) {
 }))
 diseases <- c("Autism Spectrum Disorders", "Obesity", "Intellectual Disability", 
               "MENTAL RETARDATION, AUTOSOMAL DOMINANT 39", "Neurodevelopmental Disorders")
-subset(gq, disease_name %in% diseases)
+subset(res_df, disease_name %in% diseases)
+
+obe <- helix$idnum[abs(helix$hs_zbmi_theano) > 2]
+
+helix.epi.obe <- subset(helix.epi.gexp, idnum %in% obe)
+subset(helix.epi.obe, eqtm_symbol  %in% obe_genes$X1 | tss_symbol %in% obe_genes$X1 | near_symbol %in% obe_genes$X1)
 
 subset(helix.epi.filt, eqtm_symbol == "MYT1L" | tss_symbol == "MYT1L" | near_symbol == "MYT1L" )
 
@@ -2066,6 +2064,41 @@ subset(helix.epi.filt, eqtm_symbol == "MYT1L" | tss_symbol == "MYT1L" | near_sym
 rep_epis <- subset(sab.rep.res2, sigDatasets == "Cord blood-4 years-8 years")
 
 ### INMA 4 ####
+res.comb.rep.sumdf <- rbind(res.inma4.filt %>% 
+                               mutate(epi_id = paste(method, idnum, epi_region_id)) %>%
+                               filter(epi_id %in% mutate(rep_epis, epi_id = paste(method, idnum, epi_region_id))$epi_id) %>%
+                               select(method, ends_with("out")) %>%
+                               gather(Measure, value, 2:4) %>%
+                               mutate(age = "4 years"),
+                             res.helix.filt %>% 
+                               mutate(epi_id = paste(method, idnum, epi_region_id)) %>%
+                               filter(epi_id %in% mutate(rep_epis, epi_id = paste(method, idnum, epi_region_id))$epi_id) %>%
+                               select(method, ends_with("out")) %>%
+                               gather(Measure, value, 2:4) %>%
+                               mutate(age = "8 years")) %>%
+  filter(!is.na(value)) %>%
+  mutate(exp_type = sapply(strsplit(Measure, "_"), `[`, 1),
+         exp_type = factor(exp_type, levels = c("eqtm", "tss", "near")), 
+         method = factor(method, levels = c("quantile", "beta", "mlm")))
+
+
+rep.prop.gexp.plot <- res.comb.rep.sumdf %>%
+  group_by(method, exp_type, age) %>%
+  summarize(p = mean(value),
+            n = n()) %>%
+  ggplot(aes(x = exp_type, y = p*100, fill = method)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  facet_grid(age ~ method) +
+  scale_y_continuous("Epimutaitons with outlier expression (%)", limits = c(0, 50)) +
+  scale_x_discrete(name = "Gene mapping")
+
+png("figures/allINMA.genexp.replicates.prop.png", height = 350)
+rep.prop.gexp.plot
+dev.off()
+
+
+
 res.inma4.rep <- res.inma4.filt %>%
   mutate(epi_id = paste(method, idnum, epi_region_id)) %>%
   filter(epi_id %in% mutate(rep_epis, epi_id = paste(method, idnum, epi_region_id))$epi_id)
@@ -2080,37 +2113,37 @@ res.inma4.rep.sumdf  <- res.inma4.rep %>%
          method = factor(method, levels = c("quantile", "beta", "mlm")))
 
 
-inma4.gexp.rep.plot <- res.inma4.rep.sumdf %>% 
-  ggplot(aes(x = exp_type, y = value, color = method)) +
-  geom_violin() +
-  geom_dotplot(binaxis = 'y', stackdir = 'centerwhole', dotsize = 0.1, stackratio = .5) +
-  theme_bw() +
-  facet_grid(measure ~ method, scales = "free")
-
-png("figures/INMA4.genexp.rep.png")
-inma4.gexp.rep.plot
-dev.off()
-
-inma4.gexp.methdiff.rep.plot <- res.inma4.rep.sumdf %>%
-  filter(measure == "z") %>%
-  ggplot(aes(x = abs(mean_diff), y = abs(value), color = method)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  theme_bw() +
-  facet_grid(exp_type ~ method, scales = "free")
-
-
-png("figures/INMA4.genexp.rep.methdiff.png")
-inma4.gexp.methdiff.rep.plot
-dev.off()
-
-meth.gexp.rep.assoc4 <- lapply(methods, function(m){
-  lapply(c("eqtm", "tss", "near"), function(me){
-    tab <- res.inma4.rep.sumdf %>%
-      filter(measure == "z" & method ==m & exp_type == me) 
-    summary(lm(abs(value) ~ abs(mean_diff), tab))  
-  })
-})
+# inma4.gexp.rep.plot <- res.inma4.rep.sumdf %>% 
+#   ggplot(aes(x = exp_type, y = value, color = method)) +
+#   geom_violin() +
+#   geom_dotplot(binaxis = 'y', stackdir = 'centerwhole', dotsize = 0.1, stackratio = .5) +
+#   theme_bw() +
+#   facet_grid(measure ~ method, scales = "free")
+# 
+# png("figures/INMA4.genexp.rep.png")
+# inma4.gexp.rep.plot
+# dev.off()
+# 
+# inma4.gexp.methdiff.rep.plot <- res.inma4.rep.sumdf %>%
+#   filter(measure == "z") %>%
+#   ggplot(aes(x = abs(mean_diff), y = abs(value), color = method)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   theme_bw() +
+#   facet_grid(exp_type ~ method, scales = "free")
+# 
+# 
+# png("figures/INMA4.genexp.rep.methdiff.png")
+# inma4.gexp.methdiff.rep.plot
+# dev.off()
+# 
+# meth.gexp.rep.assoc4 <- lapply(methods, function(m){
+#   lapply(c("eqtm", "tss", "near"), function(me){
+#     tab <- res.inma4.rep.sumdf %>%
+#       filter(measure == "z" & method ==m & exp_type == me) 
+#     summary(lm(abs(value) ~ abs(mean_diff), tab))  
+#   })
+# })
 
 ### HELIX ####
 res.helix.rep <- res.helix.filt %>%
@@ -2212,6 +2245,8 @@ colnames(pers_epi_df) <- gsub("y", "8years", colnames(pers_epi_df))
 colnames(pers_epi_df) <- gsub("x", "4years", colnames(pers_epi_df))
 writexl::write_xlsx(pers_epi_df[, colnames(pers_epi_df)[c(3, 2, 4:8, 20, 32, 10:12, 14:19, 22:24, 26:31)]],
                     path = "tables/INMA.Epimutations.persistentEpis.xlsx")
+
+
 
 
 
