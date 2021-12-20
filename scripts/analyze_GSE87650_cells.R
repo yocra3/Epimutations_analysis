@@ -39,6 +39,7 @@ ggplot(data.frame(pcs2, cells = gset_cds$`cell type:ch1`), aes(x = PC1, y = PC2,
 
 ## Remove sample places on another cluster 
 gset_filt <- gset_filt[, pcsdf$shape == "good"]
+save(gset_filt, file = "results/preprocess/GSE87650/GSE87650.autosomic.filterAnnotatedProbes.filterIndividuals.GenomicRatioSet.Rdata")
 
 ## Split gset by cell type
 cells <- unique(gset_filt$`cell type:ch1`)
@@ -60,6 +61,12 @@ gset_res_list <- lapply(gset_list, getResiduals)
 
 save(gset_res_list, file = "results/preprocess/GSE87650/GSE87650.cellSplit.autosomic.filterAnnotatedProbes.PCAresiduals.GenomicRatioSet.Rdata")
 
+getPCs <- function(grs){
+  beta <- meffil:::impute.matrix(getBeta(grs), margin = 1)
+  ndim <- isva::EstDimRMT(beta, FALSE)$dim + 1
+  ndim
+}
+sapply(gset_list, getPCs)
 
 ## Run epimutations ####
 methods <- c("beta", "quantile", "mlm")
@@ -108,102 +115,91 @@ plotDisease <- function(set, range){
 
 ## Case control ####
 ### Preprocess data ####
-res.gse87650.cell.casecontrol.list2 <- lapply(res.gse87650.cells.casecontrol.list, function(x){
-  nMethod <- sapply(x, nrow)
-  nMethod[sapply(nMethod, is.null)] <- 0
-  res.gse87650.cc.df <-  Reduce(rbind, x) %>%
-    mutate(method = rep(methods, unlist(nMethod)))
-})
-
-res.gse87650.cell.cc.df <-  Reduce(rbind, res.gse87650.cell.casecontrol.list2) %>%
-    mutate(cell = rep(names(res.gse87650.cell.casecontrol.list2), 
-                      sapply(res.gse87650.cell.casecontrol.list2, nrow))) %>%
-    left_join(colData(gset_filt) %>% 
-                data.frame() %>% 
-                mutate(sample = geo_accession,
-                       disease = .data[["simplified_diagnosis.ch1"]],
-                       id = .data[["patient_number.ch1"]],
-                       age = as.numeric(.data[["age.at.sample.ch1"]]),
-                       sex = .data[["Sex.ch1"]]) %>%
-                select(sample, disease, age, sex, id)) 
-
-res.gse87650.cell.cc.sum <- res.gse87650.cell.cc.df %>%
-    group_by(method, sample, disease, age, sex, id, cell) %>%
-    summarize(n = sum(start != 0 & (is.na(pvalue) | pvalue < 0.05/40408))) %>%
-    mutate(n_cat = ifelse(n == 0, "0",
-                          ifelse(n == 1, "1", 
-                                 ifelse(n < 6, "2-5",
-                                        ifelse(n < 20, "6-20", "20+")))),
-           n_cat = factor(n_cat, levels = c("0", "1", "2-5", "6-20", "20+")))
-
-
-res.gse87650.cell.cc.sum %>%
-  mutate(method = factor(method, levels = c("quantile", "beta", "mlm"))) %>%
-  group_by(method, cell, disease, n_cat) %>%
-  summarize(n = n()) %>%
-  mutate(p = n/sum(n)) %>%
-  ungroup() %>%
-  complete(method, disease, cell, n_cat, fill = list(n = 0, p = 0)) %>%
-  ggplot(aes(x = disease, y = p*100, color = n_cat, fill = n_cat)) +
-  geom_bar(stat = "identity") +
-  theme_bw() +
-  facet_grid(method ~ cell) +
-  scale_y_continuous(name = "Proportion of individuals") +
-  scale_x_discrete(name = "Disease") +
-  scale_color_discrete(name = "Epimutations per sample") +
-  scale_fill_discrete(name = "Epimutations per sample")
-
-
-### Plot recurrent epimutations identified in whole blood ####
-## Crohn recurrent: cerca OTX1 -- revisar
-plotDisease(gset_filt, GRanges("chr2:63279495-63286355")) 
-
-## Crohn recurrent: cerca IRX1 - no signal
-plotDisease(gset_filt, GRanges("chr5:3592464-3592638")) 
-plotDisease(gset_filt, GRanges("chr5:3599012-3602413"))
-
-## Crohn recurrent: cerca NR2F2 - no signal
-plotDisease(gset_filt, GRanges("chr15:96884949-96888024")) 
-plotDisease(gset_filt, GRanges("chr15:96890452-96890880")) 
-
-## Crohn recurrent: cerca NR2F2 - no signal
-plotDisease(gset_filt, GRanges("chr7:96647021-96655889")) 
-plotDisease(gset_filt, GRanges("chr7:96650096-96652115")) 
-plotDisease(gset_filt, GRanges("chr7:96654782-96655889")) 
-
-## Crohn recurrent: cerca TFAP2A
-plotDisease(gset_filt, GRanges("chr6:10381196-10383147")) 
-plotDisease(gset_filt, GRanges("chr6:10385320-10385903"))
-
-## Crohn recurrent: cerca DMRTA2 - no signal
-plotDisease(gset_filt, GRanges("chr1:50882910-50885352")) 
-plotDisease(gset_filt, GRanges("chr1:50886393-50886782"))
-
-## individual epimtuations - no signal in cells 
-plotDisease(gset_filt, GRanges("chr12:118405665-118406158")) ## ksr2
-plotDisease(gset_filt, GRanges("chr7:27160520-27160674")) ## HOXA3
-plotDisease(gset_filt, GRanges("chr12:51717674-51718112")) ## BIN2
-plotDisease(gset_filt, GRanges("chr11:18433554-18433745")) ## LDHC
-plotDisease(gset_filt, GRanges("chr11:66511804-66512979")) ## C11orf80
-plotDisease(gset_filt, GRanges("chr1:1851439-1851910")) ## TMEM52
-plotDisease(gset_filt, GRanges("chr6:101846767-101846797")) ## GRIK2
-plotDisease(gset_filt, GRanges("chr10:105978651-105978702")) ## WDR6
-plotDisease(gset_filt, GRanges("chr11:60738971-60739178")) ## CD6
-
-plotDisease(gset_filt, GRanges("chr2:182321354-182321489")) ## ITGA4 - methylation PMID: 25902909
-plotDisease(gset_filt, GRanges("chr11:1874017-1874320")) ## LSP1 - dudoso
-plotDisease(gset_filt, GRanges("chr16:68676451-68676743")) ## CDH3 - dudoso
-plotDisease(gset_filt, GRanges("chr6:133035150-133035266")) ## VNN1 - expression PMID: 23949622
-
+# res.gse87650.cell.casecontrol.list2 <- lapply(res.gse87650.cells.casecontrol.list, function(x) x$quantile)
+# 
+# res.gse87650.cell.cc.df <-  Reduce(rbind, res.gse87650.cell.casecontrol.list2) %>%
+#     mutate(cell = rep(names(res.gse87650.cell.casecontrol.list2), 
+#                       sapply(res.gse87650.cell.casecontrol.list2, nrow))) %>%
+#     left_join(colData(gset_filt) %>% 
+#                 data.frame() %>% 
+#                 mutate(sample = geo_accession,
+#                        disease = .data[["simplified_diagnosis.ch1"]],
+#                        id = .data[["patient_number.ch1"]],
+#                        age = as.numeric(.data[["age.at.sample.ch1"]]),
+#                        sex = .data[["Sex.ch1"]]) %>%
+#                 select(sample, disease, age, sex, id)) 
+# 
+# res.gse87650.cell.cc.sum <- res.gse87650.cell.cc.df %>%
+#     group_by(sample, disease, age, sex, id, cell) %>%
+#     summarize(n = sum(start != 0 & cpg_n >= 3)) %>%
+#     mutate(n_cat = ifelse(n == 0, "0",
+#                           ifelse(n == 1, "1", 
+#                                  ifelse(n < 6, "2-5",
+#                                         ifelse(n < 20, "6-20", "20+")))),
+#            n_cat = factor(n_cat, levels = c("0", "1", "2-5", "6-20", "20+")))
+# 
+# 
+# res.gse87650.cell.cc.sum %>%
+#   group_by(cell, disease, n_cat) %>%
+#   summarize(n = n()) %>%
+#   mutate(p = n/sum(n)) %>%
+#   ungroup() %>%
+#   complete(disease, cell, n_cat, fill = list(n = 0, p = 0)) %>%
+#   ggplot(aes(x = disease, y = p*100, color = n_cat, fill = n_cat)) +
+#   geom_bar(stat = "identity") +
+#   theme_bw() +
+#   facet_grid( ~ cell) +
+#   scale_y_continuous(name = "Proportion of individuals") +
+#   scale_x_discrete(name = "Disease") +
+#   scale_color_discrete(name = "Epimutations per sample") +
+#   scale_fill_discrete(name = "Epimutations per sample")
+# 
+# 
+# ### Plot recurrent epimutations identified in whole blood ####
+# ## Crohn recurrent: cerca OTX1 -- revisar
+# plotDisease(gset_filt, GRanges("chr2:63279495-63286355")) 
+# 
+# ## Crohn recurrent: cerca IRX1 - no signal
+# plotDisease(gset_filt, GRanges("chr5:3592464-3592638")) 
+# plotDisease(gset_filt, GRanges("chr5:3599012-3602413"))
+# 
+# ## Crohn recurrent: cerca NR2F2 - no signal
+# plotDisease(gset_filt, GRanges("chr15:96884949-96888024")) 
+# plotDisease(gset_filt, GRanges("chr15:96890452-96890880")) 
+# 
+# ## Crohn recurrent: cerca NR2F2 - no signal
+# plotDisease(gset_filt, GRanges("chr7:96647021-96655889")) 
+# plotDisease(gset_filt, GRanges("chr7:96650096-96652115")) 
+# plotDisease(gset_filt, GRanges("chr7:96654782-96655889")) 
+# 
+# ## Crohn recurrent: cerca TFAP2A
+# plotDisease(gset_filt, GRanges("chr6:10381196-10383147")) 
+# plotDisease(gset_filt, GRanges("chr6:10385320-10385903"))
+# 
+# ## Crohn recurrent: cerca DMRTA2 - no signal
+# plotDisease(gset_filt, GRanges("chr1:50882910-50885352")) 
+# plotDisease(gset_filt, GRanges("chr1:50886393-50886782"))
+# 
+# ## individual epimtuations - no signal in cells 
+# plotDisease(gset_filt, GRanges("chr12:118405665-118406158")) ## ksr2
+# plotDisease(gset_filt, GRanges("chr7:27160520-27160674")) ## HOXA3
+# plotDisease(gset_filt, GRanges("chr12:51717674-51718112")) ## BIN2
+# plotDisease(gset_filt, GRanges("chr11:18433554-18433745")) ## LDHC
+# plotDisease(gset_filt, GRanges("chr11:66511804-66512979")) ## C11orf80
+# plotDisease(gset_filt, GRanges("chr1:1851439-1851910")) ## TMEM52
+# plotDisease(gset_filt, GRanges("chr6:101846767-101846797")) ## GRIK2
+# plotDisease(gset_filt, GRanges("chr10:105978651-105978702")) ## WDR6
+# plotDisease(gset_filt, GRanges("chr11:60738971-60739178")) ## CD6
+# 
+# plotDisease(gset_filt, GRanges("chr2:182321354-182321489")) ## ITGA4 - methylation PMID: 25902909
+# plotDisease(gset_filt, GRanges("chr11:1874017-1874320")) ## LSP1 - dudoso
+# plotDisease(gset_filt, GRanges("chr16:68676451-68676743")) ## CDH3 - dudoso
+# plotDisease(gset_filt, GRanges("chr6:133035150-133035266")) ## VNN1 - expression PMID: 23949622
+# 
 
 ## Leave-one-out ####
 ### Preprocess data ####
-res.gse87650.cell.loo.list2 <- lapply(res.gse87650.cells.loo.list, function(x){
-  nMethod <- sapply(x, nrow)
-  nMethod[sapply(nMethod, is.null)] <- 0
-  res.gse87650.cc.df <-  Reduce(rbind, x) %>%
-    mutate(method = rep(methods, unlist(nMethod)))
-})
+res.gse87650.cell.loo.list2 <- lapply(res.gse87650.cells.loo.list, function(x) x$quantile)
 
 res.gse87650.cell.loo.df <-  Reduce(rbind, res.gse87650.cell.loo.list2) %>%
   mutate(cell = rep(names(res.gse87650.cell.loo.list2), 
@@ -219,41 +215,39 @@ res.gse87650.cell.loo.df <-  Reduce(rbind, res.gse87650.cell.loo.list2) %>%
 
 ### Explore epimutations replicability in different tissues ####
 res.gse87650.cell.loo.filt <- res.gse87650.cell.loo.df %>%
-  filter(chromosome != 0) %>%
+  filter(chromosome != 0 & cpg_n >= 3) %>%
   mutate(reg_id = paste(epi_region_id, id)) %>%
-  group_by(id, method, epi_region_id) %>%
+  group_by(id, epi_region_id) %>%
   mutate(n_cells = length(unique(cell)))
 
-upset.list <- lapply(methods, function(x) {
-  lapply(cells, function(y) {
-  subset(res.gse87650.cell.loo.filt, method == x & cell == y)$reg_id
-  })
+upset.list <- lapply(cells, function(y) {
+  subset(res.gse87650.cell.loo.filt, cell == y)$reg_id
 })
 
-x <- "beta"
-png(paste0("figures/GSE87650.", x, ".cell_overlaps.png"), width = 700, height = 600)
-upset(fromList(upset.list[[x]]), sets = cells, order.by = "freq",
-      mainbar.y.label = "Common epimutations", 
-      sets.x.label = "Epimutations per cell")
-dev.off() 
+# x <- "beta"
+# png(paste0("figures/GSE87650.", x, ".cell_overlaps.png"), width = 700, height = 600)
+# upset(fromList(upset.list[[x]]), sets = cells, order.by = "freq",
+#       mainbar.y.label = "Common epimutations", 
+#       sets.x.label = "Epimutations per cell")
+# dev.off() 
 
 x <- "quantile"
 png(paste0("figures/GSE87650.", x, ".cell_overlaps.png"), width = 700, height = 600)
-upset(fromList(upset.list[[x]]), sets = cells, order.by = "freq",
+upset(fromList(upset.list), sets = cells, order.by = "freq",
       mainbar.y.label = "Common epimutations", 
       sets.x.label = "Epimutations per cell")
 dev.off() 
-
-x <- "mlm"
-png(paste0("figures/GSE87650.", x, ".cell_overlaps.png"), width = 700, height = 600)
-upset(fromList(upset.list[[x]]), sets = cells, order.by = "freq",
-      mainbar.y.label = "Common epimutations", 
-      sets.x.label = "Epimutations per cell")
-dev.off() 
+# 
+# x <- "mlm"
+# png(paste0("figures/GSE87650.", x, ".cell_overlaps.png"), width = 700, height = 600)
+# upset(fromList(upset.list[[x]]), sets = cells, order.by = "freq",
+#       mainbar.y.label = "Common epimutations", 
+#       sets.x.label = "Epimutations per cell")
+# dev.off() 
 
 res.gse87650.cell.loo.props <- res.gse87650.cell.loo.df %>%
-  filter(chromosome != 0) %>%
-  group_by(id, method, epi_region_id) %>%
+  filter(chromosome != 0 & cpg_n >= 3) %>%
+  group_by(id, epi_region_id) %>%
   summarize(cells = paste(sort(unique(cell)), collapse = ","))
 
 
@@ -272,12 +266,12 @@ magnitudes <- mclapply(seq_len(nrow(res.gse87650.cell.loo.filt)),
                                            gset_res_list[[res.gse87650.cell.loo.filt[i, ]$cell]]), 
                        mc.cores = 10)
 res.gse87650.cell.loo.filt$magnitude <- unlist(magnitudes)
-subset(res.gse87650.cell.loo.filt, n_cells == 4 & abs(magnitude) > 0.4 & method == "quantile") %>%
+subset(res.gse87650.cell.loo.filt, n_cells == 4 & abs(magnitude) > 0.4) %>%
   arrange(reg_id) %>% select(-starts_with("CRE"), -ends_with("pvalue"), -cpg_ids) %>%  data.frame()
 
 res.gse87650.cell.loo.cpgs <- res.gse87650.cell.loo.filt %>%
-  select(cell, id, method, cpg_ids, epi_region_id, reg_id, chromosome, start, end) %>%
-  group_by(cell, method, id, epi_region_id) %>%
+  select(cell, id, cpg_ids, epi_region_id, reg_id, chromosome, start, end) %>%
+  group_by(cell, id, epi_region_id) %>%
   summarize(cpg_ids = paste(unique(cpg_ids), collapse = ",")) %>%
   spread(cell, cpg_ids)
 res.gse87650.cell.loo.cpgs$cpg_list <- lapply(seq_len(nrow(res.gse87650.cell.loo.cpgs)), function(i) {
@@ -347,47 +341,54 @@ res.gse87650.cell.loo.rep <- res.gse87650.cell.loo.cpgs %>%
          sigDatasets2 = paste(cd4_st2, cd8_st2, mono_st2, whole_st2, sep = "-"))
 
 
-rep.plot1 <- res.gse87650.cell.loo.rep %>%
-  mutate(simpDatasets = gsub("-", "", sigDatasets),
-         cells = ifelse(simpDatasets == "CD4CD8monocyteswh blood", "4 tissues", 
-                        ifelse(simpDatasets %in% c("CD4", "CD8", "monocytes", "wh blood"), simpDatasets, "2-3 tissues")),
-         cells = factor(cells, levels = c("CD4", "CD8", "monocytes", "wh blood", "2-3 tissues", "4 tissues")),
-         method = factor(method, levels = c("quantile", "beta", "mlm"))) %>%
-  group_by(method, cells) %>%
+rep.plot <- res.gse87650.cell.loo.rep %>%
+  select(id, epi_region_id, sigDatasets, sigDatasets2) %>%
+  gather("Type", "CellTypes", 3:4) %>%
+  mutate(Type = ifelse(Type == "sigDatasets", "Epimutations", "Epimutations + outliers"),
+         simpDatasets = gsub("-", "", CellTypes),
+         cells = ifelse(simpDatasets == "CD4CD8monocyteswh blood", "Whole blood + 3 cell types", 
+                        ifelse(simpDatasets %in% c("CD4", "CD8", "monocytes", "wh blood"), simpDatasets, 
+                               ifelse(grepl("wh", simpDatasets), "Whole blood + 1-2 cell types",  "2+ cell types"))),
+         cells = ifelse(cells == "wh blood", "Whole blood", cells),
+         cells = factor(cells, levels = c("CD4", "CD8", "monocytes",  "2+ cell types", "Whole blood", 
+                                          "Whole blood + 1-2 cell types", 
+                                          "Whole blood + 3 cell types"))) %>%
+  group_by(cells, Type) %>%
   summarize(n = n()) %>%
-  group_by(method) %>%
+  group_by(Type) %>%
   mutate(p = n/sum(n)) %>%
-  ggplot(aes( x = method, y = p*100, fill = cells)) +
+  ggplot(aes( x = Type, y = p*100, fill = cells)) +
   geom_bar(stat = "identity") +
   scale_y_continuous(name = "Proportion of epimutations") +
   theme_bw() +
-  theme(legend.position = "none",
-        plot.title = element_text(hjust = 0.5, face = "bold")) +
-  ggtitle("Detected epimutations")
-
-rep.plot2 <- res.gse87650.cell.loo.rep %>%
-  mutate(simpDatasets = gsub("-", "", sigDatasets2),
-         cells = ifelse(simpDatasets == "CD4CD8monocyteswh blood", "4 tissues", 
-                        ifelse(simpDatasets %in% c("CD4", "CD8", "monocytes", "wh blood"), simpDatasets, "2-3 tissues")),
-         cells = factor(cells, levels = c("CD4", "CD8", "monocytes", "wh blood", "2-3 tissues", "4 tissues")),
-         method = factor(method, levels = c("quantile", "beta", "mlm"))) %>%
-  group_by(method, cells) %>%
-  summarize(n = n()) %>%
-  group_by(method) %>%
-  mutate(p = n/sum(n)) %>%
-  ggplot(aes( x = method, y = p*100, fill = cells)) +
-  geom_bar(stat = "identity") +
-  scale_y_continuous(name = "Proportion of epimutations") +
-  theme_bw()  +
   theme(plot.title = element_text(hjust = 0.5, face = "bold")) +
-  ggtitle("Detected epimutations + outliers")
+  ggtitle("Epimutations replicability") +
+  scale_fill_manual(name = "", values = c("pink", "darkolivegreen", "turquoise4", "brown", "grey80", "grey50", "grey20"))
 
-plot_grid(rep.plot1, rep.plot2)
+png("figures/GSE87650.replicateEpis.cells.png", width = 600, height = 350)
+rep.plot
+dev.off()
 
+rep.df <- res.gse87650.cell.loo.rep %>%
+  select(id, epi_region_id, sigDatasets, sigDatasets2) %>%
+  gather("Type", "CellTypes", 3:4) %>%
+  mutate(Type = ifelse(Type == "sigDatasets", "Epimutations", "Epimutations + outliers"),
+         simpDatasets = gsub("-", "", CellTypes),
+         cells = ifelse(simpDatasets == "CD4CD8monocyteswh blood", "Whole blood + 3 cell types", 
+                        ifelse(simpDatasets %in% c("CD4", "CD8", "monocytes", "wh blood"), simpDatasets, 
+                               ifelse(grepl("wh", simpDatasets), "Whole blood + 1-2 cell types",  "2+ cell types"))),
+         cells = ifelse(cells == "wh blood", "Whole blood", cells),
+         cells = factor(cells, levels = c("CD4", "CD8", "monocytes",  "2+ cell types", "Whole blood", 
+                                          "Whole blood + 1-2 cell types", 
+                                          "Whole blood + 3 cell types"))) %>%
+  group_by(cells, Type) %>%
+  summarize(n = n()) %>%
+  group_by(Type) %>%
+  mutate(p = n/sum(n)) 
 
-plotCase <- function(reg_name, met, res){
+plotCase <- function(reg_name, res){
   
-  selRows <- subset(res, reg_id == reg_name & method == met)
+  selRows <- subset(res, reg_id == reg_name)
   
   avcells <- unique(selRows$cell)
   
@@ -405,18 +406,28 @@ plotCase <- function(reg_name, met, res){
   }
   
   plots <- lapply(cells, function(selcell) {
-    plot_epimutations(subset(selRows, cell == selcell), methy = gset_res_list[[selcell]]) +
+    p <- plot_epimutations(subset(selRows, cell == selcell), methy = gset_res_list[[selcell]]) +
     ggtitle(selcell)
+    if (selcell == "wh blood"){
+      p <- p + ggtitle("Whole blood")
+    }
+    p
   })
   
   plots
 }
-ex1 <- plotCase("chr12_10095902 9005", "quantile", res.gse87650.cell.loo.filt)
+ex1 <- plotCase("chr12_10095902 9005", res.gse87650.cell.loo.filt)
 plot_grid(plotlist = ex1, ncol = 2 )
 
 ## Epimutation in 4 cell types
-ex2 <- plotCase("chr20_62886664 8975", "quantile", res.gse87650.cell.loo.filt)
-plot_grid(plotlist = ex2, ncol = 2 )
+ex2 <- plotCase("chr20_62886664 8975", res.gse87650.cell.loo.filt)
+plot_grid(plotlist = ex2[c(3, 1, 2, 4)], ncol = 2 )
+
+png("figures/GSE87650.replicateEpicell.png", width = 1000, height = 500)
+plot_grid(plotlist = ex2[c(3, 1, 2, 4)], ncol = 2 )
+dev.off()
+
+
 
 ## Epimutation in monocytes + whole blood
 subset(res.gse87650.cell.loo.rep, sigDatasets2  == "--monocytes-wh blood" & method == "quantile") %>% 
@@ -430,16 +441,49 @@ subset(res.gse87650.cell.loo.rep, sigDatasets2  == "---wh blood" & method == "qu
 ex4 <- plotCase("chr10_133793442 8918", "quantile", res.gse87650.cell.loo.filt)
 plot_grid(plotlist = ex3, ncol = 2 )
 
+
+## Epimutation in CD8
+subset(res.gse87650.cell.loo.rep, sigDatasets2  == "-CD8--") %>% 
+  data.frame()
+ex5 <- plotCase("chr11_59823993 9034", res.gse87650.cell.loo.filt)
+
+png("figures/GSE87650.Epicell_specific.png", width = 1000, height = 500)
+plot_grid(plotlist = ex5[c(3, 1, 2, 4)], ncol = 2 )
+dev.off()
+
+
+nowh_cpgs <- subset(res.gse87650.cell.loo.rep, !grepl("wh", sigDatasets2)) %>% 
+  data.frame() %>% pull("cpg_list") %>% unlist() %>% unique()
+
+pcs_nowh <- meffil.methylation.pcs(getBeta(gset_filt[cd8_cpgs, ]))
+pheatmap::pheatmap(getBeta(gset_filt[nowh_cpgs, ]),
+                           annotation_col  = data.frame(colData(gset_filt)[, "cell type:ch1", drop = FALSE]))
+
+
+sp_epis <- subset(res.gse87650.cell.loo.rep, sigDatasets2 %in% c("-CD8--", "--monocytes-"))
+
+diffMedian <-  function(i){
+  cpgs <- unlist(sp_epis[i, ]$cpg_list)
+  
+  cells <- c("CD4", "CD8", "monocytes")[c(sp_epis$logcd4[i], sp_epis$logcd8[i], sp_epis$logmono[i])]
+  whmed <- rowMedians(getBeta(gset_filt[cpgs, gset_filt$`cell type:ch1` == "wh blood"]))
+  cellmed <- rowMedians(getBeta(gset_filt[cpgs, gset_filt$`cell type:ch1` %in% cells]))
+  mean(whmed - cellmed)
+}
+sp_epis$diffMedians <- sapply(seq_len(nrow(sp_epis)), diffMedian)
+mean(abs(sp_epis$diffMedians) > 0.2)
+
 ## Correlation with gene expression ####
 ### Functions ####
-getGenesZ <- function(epi_df, row, gexpZ_list, gexpRange, window){
+getGenesZ <- function(epi_df, row, gexp_list, gexpRange, window){
   
-  gexpZ <- gexpZ_list[[epi_df[row, "cell"][[1]]]]
+  gexp <- assay(gexp_list[[epi_df[row, "cell"][[1]]]])
   
   exp_name <- epi_df[row, ][["id"]]
-  if (!exp_name %in% colnames(gexpZ)){
+  if (!exp_name %in% colnames(gexp)){
     return(  list(geneName = NA,
                   Zscore = NA,
+                  outliers = NA,
                   distance = NA, 
                   rank = NA))
   }
@@ -449,92 +493,114 @@ getGenesZ <- function(epi_df, row, gexpZ_list, gexpRange, window){
   if (length(transRanges) == 0){
     return(  list(geneName = NA,
                   Zscore = NA,
+                  outliers = NA,
                   distance = NA, 
                   rank = NA))
   }
   
   selTranscripts <- names(transRanges)
   
-  zs <- gexpZ[selTranscripts, exp_name]
-  rankMat <- apply(gexpZ[selTranscripts, , drop = FALSE], 1, rank)
-  rownames(rankMat) <- colnames(gexpZ)
+  
+  genesmat <- gexp[selTranscripts, , drop = FALSE]
+  zmat <- apply(genesmat, 1, function(x) (x - mean(x))/sd(x))
+  zs <- zmat[exp_name, ]
+  
+  rankMat <- apply(genesmat, 1, rank)
   ranks <- rankMat[exp_name, ]
   
-  
+
+  isOutliersRow <- function(x){
+    qs <- quantile(x, c(0.25, 0.75))
+    iq <- qs[2] - qs[1]
+    out <- x < qs[1] - 1.5*iq | x > qs[2] + 1.5*iq
+    out
+  }
+  outmat <- apply(genesmat, 1, isOutliersRow)
+  outs <- outmat[exp_name, ]
+
   list(geneNames = selTranscripts,
        Zscores = zs,
+       outliers = outs, 
        distances = distance(epi_range, transRanges),
        rank = ranks)
   
 }
 selectNearest <- function(x) {
   if (length(x$Zscore) == 1){
-    data.frame(geneName = x$geneName, Zscore = x$Zscore, distance = x$Zscore, rank = x$rank) 
+    data.frame(geneName = x$geneName, Zscore = x$Zscore, outliers = x$outliers,
+               distance = x$Zscore, rank = x$rank) 
   }
   else {
     ind <- which.min(x$distance)
-    data.frame(geneName =  x$geneName[ind], Zscore = x$Zscore[ind], 
+    data.frame(geneName =  x$geneName[ind], outliers = x$outliers[ind],
+               Zscore = x$Zscore[ind], 
                distance = x$distance[ind], rank = x$rank[ind])
   }
 }
 
-getGenesTSS <- function(epi_df, row, gexpZ_list){
+isOutliers <- function(x, val){
+  qs <- quantile(x, c(0.25, 0.75))
+  iq <- qs[2] - qs[1]
+  out <- val < qs[1] - 1.5*iq | val > qs[2] + 1.5*iq
+  out
+}
+
+getGenesTSS <- function(epi_df, row, gexp_list){
   
   gene <- unlist(epi_df[row, "tss_genes"])
   if (length(gene) == 1 && is.na(gene)){
-    return(   list(z = NA, rank = NA, gene = NA))
+    return(   list(z = NA, out = NA, rank = NA, gene = NA))
   }
-  selTranscripts <- rownames(se)[rowData(se)$Symbol %in% gene]
+  selTranscripts <- rownames(gexp)[rowData(gexp)$Symbol %in% gene]
   if (length(selTranscripts) == 0){
-    return(   list(z = NA, rank = NA, gene = NA))
+    return(   list(z = NA, out = NA, rank = NA, gene = NA))
   }
   exp_name <- epi_df[row, ][["id"]]
   
-  gexpZ <- gexpZ_list[[epi_df[row, "cell"][[1]]]]
+  gexp <- assay(gexp_list[[epi_df[row, "cell"][[1]]]])
   
-  if (!exp_name %in% colnames(gexpZ)){
-    return(   list(z = NA, rank = NA, gene = NA))
+  if (!exp_name %in% colnames(gexp)){
+    return(   list(z = NA, out = NA, rank = NA, gene = NA))
   }
-  zs <- gexpZ[selTranscripts, exp_name]
-  z <- zs[which.max(abs(zs))]
+  genesmat <- gexp[selTranscripts, , drop = FALSE]
   
-  
-  rankMat <- apply(gexpZ[selTranscripts, , drop = FALSE], 1, rank)
-  rownames(rankMat) <- colnames(gexpZ)
-  
-  ranks <- rankMat[exp_name, ]
-  rank <- ranks[which.max(abs(zs))]
-  
-  list(z = z, rank = rank, gene = selTranscripts[which.max(abs(zs))])
+  out <- getVals(genesmat, exp_name, selTranscripts)
 }
 
-getGeneseQTM <- function(epi_df, row, gexpZ_list){
+getVals <- function(genesmat, exp_name, selTranscripts){
+  zmat <- t(apply(genesmat, 1, function(x) (x - mean(x))/sd(x)))
+  zs <- zmat[, exp_name]
+  z <- zs[which.max(abs(zs))]
+  
+  genevec <- genesmat[which.max(abs(zs)), ]
+  out <- isOutliers(genevec, genevec[exp_name])
+  
+  rank <- rank(genevec)[exp_name]
+  
+  list(z = z, out = out, rank = rank, gene = selTranscripts[which.max(abs(zs))])
+  
+}
+
+getGeneseQTM <- function(epi_df, row, gexp_list){
   
   gene <- unlist(epi_df[row, "eqtm_genes"])
   if (length(gene) == 1 && is.na(gene)){
-    return(   list(z = NA, rank = NA, gene = NA))
+    return(   list(z = NA, out = NA, rank = NA, gene = NA))
   }
-  selTranscripts <- rownames(se)[rowData(se)$Symbol %in% gene]
+  selTranscripts <- rownames(gexp)[rowData(gexp)$Symbol %in% gene]
   if (length(selTranscripts) == 0){
-    return(   list(z = NA, rank = NA, gene = NA))
+    return(   list(z = NA, out = NA, rank = NA, gene = NA))
   }
   exp_name <- epi_df[row, ][["id"]]
   
-  gexpZ <- gexpZ_list[[epi_df[row, "cell"][[1]]]]
+  gexp <- assay(gexp_list[[epi_df[row, "cell"][[1]]]])
   
-  if (!exp_name %in% colnames(gexpZ)){
-    return(   list(z = NA, rank = NA, gene = NA))
+  if (!exp_name %in% colnames(gexp)){
+    return(   list(z = NA, out = NA, rank = NA, gene = NA))
   }
-  zs <- gexpZ[selTranscripts, exp_name]
-  z <- zs[which.max(abs(zs))]
+  genesmat <- gexp[selTranscripts, , drop = FALSE]
   
-  rankMat <- apply(gexpZ[selTranscripts, , drop = FALSE], 1, rank)
-  rownames(rankMat) <- colnames(gexpZ)
-  
-  ranks <- rankMat[exp_name, ]
-  rank <- ranks[which.max(abs(zs))]
-  
-  list(z = z, rank = rank, gene = selTranscripts[which.max(abs(zs))])
+  out <- getVals(genesmat, exp_name, selTranscripts)
 }
 
 
@@ -557,13 +623,36 @@ gexp_ranges <- makeGRangesFromDataFrame(rowData(gexp))
 
 gexp$cell_type <- ifelse(gexp$cell_type == "CD14", "monocytes", 
                          ifelse(gexp$cell_type == "WB", "wh blood", gexp$cell_type))
-gexp.z.list <- lapply(cells, function(cell) {
+
+gexp.list <- lapply(cells, function(cell) {
   minise <- gexp[, gexp$cell_type == cell]
-  mat <- t(apply(assay(minise), 1, function(x) (x - mean(x))/sd(x)))
-  colnames(mat) <- minise$`samplenumber:ch1`
-  mat
+  colnames(minise) <- minise$`samplenumber:ch1`
+  minise
 })
-names(gexp.z.list) <- cells
+# 
+# gexp.z.list <- lapply(cells, function(cell) {
+#   minise <- gexp[, gexp$cell_type == cell]
+#   mat <- t(apply(assay(minise), 1, function(x) (x - mean(x))/sd(x)))
+#   colnames(mat) <- minise$`samplenumber:ch1`
+#   mat
+# })
+# names(gexp.z.list) <- cells
+# 
+# gexp.outlier.list <- lapply(cells, function(cell) {
+#   minise <- gexp[, gexp$cell_type == cell]
+#   
+#   whichOutliers <- function(x){
+#     qs <- quantile(x, c(0.25, 0.75))
+#     iq <- qs[2] - qs[1]
+#     out <- x < qs[1] - 1.5*iq | x > qs[2] + 1.5*iq
+#     out
+#   }
+#   mat <- t(apply(assay(minise), 1, whichOutliers))
+#   colnames(mat) <- minise$`samplenumber:ch1`
+#   mat
+# })
+# names(gexp.outlier.list) <- cells
+
 
 ### Get TSS ####
 cpg.annot <- getAnnotation(gset_res_list[[1]])
@@ -583,8 +672,10 @@ tss_genes <- mclapply(res.gse87650.cell.loo.filt$cpg_ids, function(x) {
 
 res.gse87650.cell.loo.filt$tss_genes <- tss_genes
 tss_list <- lapply(seq_len(nrow(res.gse87650.cell.loo.filt)), getGenesTSS, 
-                   epi_df = res.gse87650.cell.loo.filt, gexpZ_list = gexp.z.list)
+                   epi_df = res.gse87650.cell.loo.filt, gexp_list = gexp.list)
+
 res.gse87650.cell.loo.filt$tss_z <- sapply(tss_list, function(x) x$z)
+res.gse87650.cell.loo.filt$tss_out <- sapply(tss_list, function(x) x$out)
 res.gse87650.cell.loo.filt$tss_rank <- sapply(tss_list, function(x) x$rank)
 res.gse87650.cell.loo.filt$tss_gene <- sapply(tss_list, function(x) x$gene)
 
@@ -602,86 +693,124 @@ eqtm_genes <- mclapply(res.gse87650.cell.loo.filt$cpg_ids, function(x) {
 
 res.gse87650.cell.loo.filt$eqtm_genes <- eqtm_genes
 eqtm_list <- lapply(seq_len(nrow(res.gse87650.cell.loo.filt)), getGeneseQTM, 
-                    epi_df = res.gse87650.cell.loo.filt, gexpZ_list = gexp.z.list)
+                    epi_df = res.gse87650.cell.loo.filt, gexp_list = gexp.list)
 res.gse87650.cell.loo.filt$eqtm_z <- sapply(eqtm_list, function(x) x$z)
+res.gse87650.cell.loo.filt$eqtm_out <- sapply(eqtm_list, function(x) x$out)
 res.gse87650.cell.loo.filt$eqtm_rank <- sapply(eqtm_list, function(x) x$rank)
 res.gse87650.cell.loo.filt$eqtm_gene <- sapply(eqtm_list, function(x) x$gene)
 
 ### Close gene ####
 geneInfo <- lapply(seq_len(nrow(res.gse87650.cell.loo.filt)), getGenesZ, 
                    epi_df = res.gse87650.cell.loo.filt,
-                   gexpZ_list = gexp.z.list, gexpRange = gexp_ranges, window = 250e3)
+                   gexp_list = gexp.list, gexpRange = gexp_ranges, window = 250e3)
 geneInfoNear <- Reduce(rbind, lapply(geneInfo, selectNearest))
 colnames(geneInfoNear) <- paste0(colnames(geneInfoNear), "Near" )
 res.gse87650.cell.loo.filt$near_z <- geneInfoNear$Zscore
+res.gse87650.cell.loo.filt$near_out <- geneInfoNear$outliers
 res.gse87650.cell.loo.filt$near_rank <- geneInfoNear$rank
 res.gse87650.cell.loo.filt$near_gene <- geneInfoNear$geneName
 
 ### Make plots ####
+res.gse87650.cell.loo.out.sum <- res.gse87650.cell.loo.filt %>%
+  ungroup() %>%
+  select(cell, magnitude, reg_id, ends_with("out")) %>%
+  gather(Measure, logical, 4:6) %>%
+  filter(!is.na(logical)) %>%
+  mutate(Measure = ifelse(Measure == "eqtm_out", "eQTM",
+                          ifelse(Measure == "near_out", "Near gene", "TSS")),
+         Measure = factor(Measure, levels = c("eQTM", "TSS", "Near gene")))
+  
+gse87650.gexp.outliers.plot <- res.gse87650.cell.loo.out.sum %>%
+  mutate(cell = ifelse(cell == "wh blood", "Whole blood", cell)) %>%
+  group_by(cell, Measure) %>%
+  summarize(p = mean(logical)) %>%
+  ggplot(aes(x = cell, y = p*100)) +
+    geom_bar(stat = "identity") +
+  theme_bw() +
+  theme(axis.text.x  = element_text(angle = 90, vjust = 0.5)) + 
+  scale_y_continuous(name = "Proportion of outliers", limits = c(0, 50)) +
+  scale_x_discrete(name = "Tissue") +
+  facet_wrap(Measure ~ .) +
+  scale_fill_discrete(name = "")
+
+png("figures/GSE87650.genexp.outliers.png", height = 300)
+gse87650.gexp.outliers.plot
+dev.off()
+
+
+res.gse87650.cell.loo.out.sum %>%
+  mutate(Expression = ifelse(logical, "Outlier", "Not Outlier")) %>%
+  ggplot(aes(x = Expression, y = abs(magnitude))) +
+  geom_boxplot() +
+  theme_bw() +
+  scale_y_continuous(name = "Epimutations magnitude") +
+  scale_x_discrete(name = "Gene status") +
+  facet_grid(cell ~ Measure)
+### Lack of pairs
+  
+
 res.gse87650.cell.loo.gexp.sum  <- res.gse87650.cell.loo.filt %>% 
   ungroup() %>%
-  select(method, cell, magnitude, reg_id, ends_with(c("z", "rank")), -sz) %>%
-  gather(Measure, value, 5:10) %>%
+  select(cell, magnitude, reg_id, ends_with(c("z", "rank")), -sz) %>%
+  gather(Measure, value, 4:9) %>%
   mutate(exp_type = sapply(strsplit(Measure, "_"), `[`, 1),
-         exp_type = factor(exp_type, levels = c("eqtm", "tss", "near")), 
+         exp_type = ifelse(exp_type == "eqtm", "eQTM",
+                                 ifelse(exp_type == "near", "Near gene", "TSS")),
+         exp_type = factor(exp_type, levels = c("eQTM", "TSS", "Near gene")),
          measure = sapply(strsplit(Measure, "_"), `[`, 2),
-         measure = factor(measure, levels = c("z", "rank")), 
-         method = factor(method, levels = c("quantile", "beta", "mlm")))
+         measure = factor(measure, levels = c("z", "rank")))
 
 
-gse87650.gexp.plots <- lapply(cells, function(x) {
-  res.gse87650.cell.loo.gexp.sum %>% 
-    filter(cell == x) %>%
-  ggplot(aes(x = exp_type, y = value, color = method)) +
+gse87650.gexp.plots <- res.gse87650.cell.loo.gexp.sum %>% 
+  mutate(cell = ifelse(cell == "wh blood", "Whole blood", cell)) %>%
+  ggplot(aes(x = exp_type, y = value, color = cell)) +
   geom_violin() +
   geom_dotplot(binaxis = 'y', stackdir = 'centerwhole', dotsize = 0.1, stackratio = .5, 
                binwidth = 0.2) +
   theme_bw() +
     theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, face = "bold")) +
-    ggtitle(x) +
-    facet_grid(measure ~ method, scales = "free")
-})
-plot_grid(plotlist = gse87650.gexp.plots)
+    facet_grid(measure ~ cell, scales = "free") +
+  scale_x_discrete(name = "Gene mapping")
+
+png("figures/GSE87650.genexp.scores.png", width = 700)
+gse87650.gexp.plots
+dev.off()
+
+
 
 # png("figures/INMA4.genexp.png")
 # inma4.gexp.plot
 # dev.off()
 
-gse87650.gexp.methdiff.plots <-  lapply(cells, function(x) {
-  res.gse87650.cell.loo.gexp.sum %>% 
-    filter(cell == x) %>%
-      filter(measure == "z") %>%
-  ggplot(aes(x = abs(magnitude), y = abs(value), color = method)) +
+gse87650.gexp.methdiff.plots <-   res.gse87650.cell.loo.gexp.sum %>% 
+  filter(measure == "z") %>%
+  ggplot(aes(x = abs(magnitude), y = abs(value), color = cell)) +
   geom_point() +
   geom_smooth(method = "lm") +
     theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, face = "bold")) +
     ggtitle(x) +
     theme_bw() +
-  facet_grid(exp_type ~ method, scales = "free")
-})
-plot_grid(plotlist = gse87650.gexp.methdiff.plots)
+  facet_grid(exp_type ~ cell, scales = "free")
+gse87650.gexp.methdiff.plots
 
 # png("figures/INMA4.genexp.methdiff.png")
 # inma4.gexp.methdiff.plot
 # dev.off()
 
-meth.gexp.assocs <- lapply(methods, function(m){
-  lapply(cells, function(ce) {
+meth.gexp.assocs <- lapply(cells, function(ce) {
     lapply(c("eqtm", "tss", "near"), function(me){
       tab <- res.gse87650.cell.loo.gexp.sum %>%
-        filter(measure == "z" & method ==m & exp_type == me & cell == ce) 
+        filter(measure == "z" & exp_type == me & cell == ce) 
       summary(lm(abs(value) ~ abs(magnitude), tab))  
-    })
   })
 })
 
 res.gse87650.cell.loo.gexp.sum2 <- res.gse87650.cell.loo.gexp.sum %>% 
-  mutate(comb_id = paste(reg_id, method)) %>%
   left_join(res.gse87650.cell.loo.rep %>%
-              mutate(comb_id = paste(epi_region_id, id, method)) %>%
-              select(comb_id, sigDatasets, sigDatasets2), by = "comb_id") %>%
+              mutate(reg_id = paste(epi_region_id, id)) %>%
+              select(reg_id, sigDatasets, sigDatasets2), by = "reg_id") %>%
   mutate(simpDatasets = gsub("-", "", sigDatasets),
        cells = ifelse(simpDatasets == "CD4CD8monocyteswh blood", "4 tissues", 
                       ifelse(simpDatasets %in% c("CD4", "CD8", "monocytes", "wh blood"), simpDatasets, "2-3 tissues")),
@@ -689,14 +818,12 @@ res.gse87650.cell.loo.gexp.sum2 <- res.gse87650.cell.loo.gexp.sum %>%
        simpDatasets2 = gsub("-", "", sigDatasets2),
        cells2 = ifelse(simpDatasets2 == "CD4CD8monocyteswh blood", "4 tissues", 
                       ifelse(simpDatasets2 %in% c("CD4", "CD8", "monocytes", "wh blood"), simpDatasets2, "2-3 tissues")),
-       cells2 = factor(cells2, levels = c("CD4", "CD8", "monocytes", "wh blood", "2-3 tissues", "4 tissues")),
-       method = factor(method, levels = c("quantile", "beta", "mlm"))) 
+       cells2 = factor(cells2, levels = c("CD4", "CD8", "monocytes", "wh blood", "2-3 tissues", "4 tissues"))) 
   
 
 
-gse87650.gexp.plots2 <- lapply(cells, function(x) {
-  res.gse87650.cell.loo.gexp.sum2 %>% 
-    filter(cell == x & exp_type == "eqtm" & !is.na(cells)) %>%
+gse87650.gexp.plots2 <-  res.gse87650.cell.loo.gexp.sum2 %>% 
+    filter(exp_type == "eqtm" & !is.na(cells)) %>%
     ggplot(aes(x = cells, y = value, color = cells)) +
     geom_violin() +
     geom_dotplot(binaxis = 'y', stackdir = 'centerwhole', dotsize = 0.1, stackratio = .5, 
@@ -704,6 +831,5 @@ gse87650.gexp.plots2 <- lapply(cells, function(x) {
     theme_bw() +
     theme( plot.title = element_text(hjust = 0.5, face = "bold")) +
     ggtitle(x) +
-    facet_grid(measure ~ method, scales = "free")
-})
-plot_grid(plotlist = gse87650.gexp.plots2)
+    facet_grid(measure ~ cells, scales = "free")
+gse87650.gexp.plots2
