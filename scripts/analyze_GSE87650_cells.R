@@ -687,7 +687,7 @@ eqtm_genes <- mclapply(res.gse87650.cell.loo.filt$cpg_ids, function(x) {
   if (nrow(tab) == 0){
     return(NA)
   } else {
-    unique(tab$CpG_gene)  
+    unique(tab$TC_gene )  
   }
 }, mc.cores = 5)
 

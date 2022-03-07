@@ -141,19 +141,18 @@ ind.res.df <- Reduce(rbind, res_indep) %>%
               select(Sample_Name, type, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
   filter(!is.na(Batch)) %>%
+  filter(method %in% c("quantile", "beta", "mlm")) %>%
   mutate(Normalization = "Independent",
-         method = factor(method, levels = c("quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd")),
-         method = recode(method, "isoforest" = "iForest", "mahdistmcd" = "mah-dist"))
-  
+         method = factor(method, levels = c("quantile", "beta", "mlm")))
 
 comb.res.df <- Reduce(rbind, res_joint) %>%
   mutate(method = rep(names(res_joint), sapply(res_joint, nrow))) %>%
   left_join(joint.pcs.df %>% 
               select(Sample_Name, type, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
-  mutate(Normalization = "Joint",
-         method = factor(method, levels = c("quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd")),
-         method = recode(method, "isoforest" = "iForest", "mahdistmcd" = "mah-dist"))
+  filter(method %in% c("quantile", "beta", "mlm")) %>%
+  mutate(Normalization = "Independent",
+         method = factor(method, levels = c("quantile", "beta", "mlm")))
 
 comSamps <- intersect(unique(ind.res.df$sample), unique(comb.res.df$sample))
 
@@ -216,7 +215,7 @@ tech.ind.top.plot <- ind.res.tech.rep %>%
   scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
   facet_grid(. ~ idnum)
 
-png("figures/INMA0.techRep.ind.top.png", height = 300)
+png("figures/INMA0.techRep.ind.top.png", height = 300, width = 500)
 tech.ind.top.plot
 dev.off()
 
@@ -258,7 +257,7 @@ group_by(method, idnum, epi_region_id) %>%
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank()) 
 
-png("figures/INMA0.techRep.ind.epi.png")
+png("figures/INMA0.techRep.ind.epi.png", height = 200, width = 400)
 tech.rep.epi.plot
 dev.off()
 
@@ -270,11 +269,11 @@ norm.res.df <- Reduce(rbind,
                                       mutate(method = rep(names(x), sapply(x, nrow)))}
                              )) %>%
   mutate(Normalization = rep(names(INMA_norm), 
-                             sapply(INMA_norm, function(x) sum(sapply(x, nrow)))),
-         Normalization = gsub("Normalization", "", Normalization),
+                             sapply(INMA_norm, function(x) sum(sapply(x, nrow))))) %>%
+  filter(method %in% c("quantile", "beta", "mlm")) %>%
+  mutate(Normalization = gsub("Normalization", "", Normalization),
          Normalization = recode(Normalization, "Functional" = "Func-minfi"),
-         method = factor(method, levels = c("quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd")),
-         method = recode(method, "isoforest" = "iForest", "mahdistmcd" = "mah-dist")) %>%
+         method = factor(method, levels = c("quantile", "beta", "mlm"))) %>%
   left_join(ind.pcs.df %>%
               select(Sample_Name, type, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
@@ -328,7 +327,7 @@ tech.norm.plot <- norm.res.out %>%
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 
-png("figures/INMA0.techRep.Norm.png", width = 1000, height = 700)
+png("figures/INMA0.techRep.Norm.png", width = 700, height = 250)
 tech.norm.plot
 dev.off()
 
@@ -351,7 +350,7 @@ tech.num.norm.epi.plot <- norm.res.out %>%
         axis.text.x = element_text(angle=90, vjust=0.5))
   
 
-png("figures/INMA0.techRep.Norm.epi.png", width = 1000, height = 700)
+png("figures/INMA0.techRep.Norm.epi.png", width = 600, height = 350)
 tech.num.norm.epi.plot
 dev.off()
 
@@ -425,7 +424,7 @@ tech.samesamp.norm.outlier.plot <- tech.samesamp.norm.quant %>%
 # dev.off()
 
 
-png("figures/INMA0.sameSamp.Norm.propOverlap.panel.png", width = 1100)
+png("figures/INMA0.sameSamp.Norm.propOverlap.panel.png", width = 800, height = 300)
 plot_grid(tech.samesamp.norm.plot,tech.samesamp.norm.outlier.plot, ncol = 2,
           labels = c("A", "B")) 
 dev.off()
@@ -465,7 +464,7 @@ tech.samesamp.norm.quant %>%
 tech.samesamp.norm.epi.plot1 <- tech.samesamp.norm.quant %>%
   mutate(rep_norm = pmin(rep_quant2, 1 - rep_quant2)) %>%
   filter(rep_norm < 0.05) %>%
-  filter(Sample_Name %in% c("SAB_C_0017", "SAB_C_0484", "SAB_C_0636", "SAB_C_0636_Rep1",
+  filter(Sample_Name %in% c("SAB_C_0017", "SAB_C_0244", "SAB_C_0636", "SAB_C_0636_Rep1",
                             "SAB_C_0016", "SAB_C_0120", "SAB_C_0211")) %>%
   mutate(epi_cat = ifelse(!is.na(rep_quant), "Epimutation", "Outlier signal"), 
          epi_cat = factor(epi_cat, levels = c("Epimutation", "Outlier signal", "No signal")),
@@ -488,7 +487,7 @@ tech.samesamp.norm.epi.plot1 <- tech.samesamp.norm.quant %>%
 tech.samesamp.norm.epi.plot2 <- tech.samesamp.norm.quant %>%
   mutate(rep_norm = pmin(rep_quant2, 1 - rep_quant2)) %>%
   filter(rep_norm < 0.05) %>%
-  filter(!Sample_Name %in% c("SAB_C_0017", "SAB_C_0484", "SAB_C_0636", "SAB_C_0636_Rep1",
+  filter(!Sample_Name %in% c("SAB_C_0017", "SAB_C_0244", "SAB_C_0636", "SAB_C_0636_Rep1",
                             "SAB_C_0016", "SAB_C_0120", "SAB_C_0211")) %>%
   mutate(epi_cat = ifelse(!is.na(rep_quant), "Epimutation", "Outlier signal"), 
          epi_cat = factor(epi_cat, levels = c("Epimutation", "Outlier signal", "No signal")),
@@ -509,8 +508,8 @@ tech.samesamp.norm.epi.plot2 <- tech.samesamp.norm.quant %>%
         panel.grid.major=element_blank())
 
 
-png("figures/INMA0.sameSamp.Norm.epi.png", height = 800, width = 1000)
-plot_grid(tech.samesamp.norm.epi.plot1, tech.samesamp.norm.epi.plot2, ncol = 2)
+png("figures/INMA0.sameSamp.Norm.epi.png", height = 800, width = 700)
+plot_grid(tech.samesamp.norm.epi.plot1, tech.samesamp.norm.epi.plot2, ncol = 2, rel_widths = c(3, 4))
 dev.off()
 
 
@@ -630,9 +629,9 @@ ind.resid.df <- Reduce(rbind, res_indep_resid) %>%
               select(Sample_Name, type, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
   filter(!is.na(Batch)) %>%
+  filter(method %in% c("quantile", "beta", "mlm")) %>%
   mutate(Normalization = "Independent",
-         method = factor(method, levels = c("quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd")),
-         method = recode(method, "isoforest" = "iForest", "mahdistmcd" = "mah-dist"))
+         method = factor(method, levels = c("quantile", "beta", "mlm")))
 
 
 ind.comb.df <- rbind(mutate(ind.resid.df, QC = "Residuals"), 
@@ -690,7 +689,7 @@ tech.resid.epi.plot <- tech.resid.quant %>%
         axis.text.x = element_text(angle=90, vjust=0.5))
 
 
-png("figures/INMA0.techRep.resid.epi.png", width = 1000, height = 700)
+png("figures/INMA0.techRep.resid.epi.png", width = 500, height = 300)
 tech.resid.epi.plot
 dev.off()
 
@@ -709,10 +708,10 @@ norm.resid.df <- Reduce(rbind,
               select(Sample_Name, type, idnum, Batch) %>% 
               mutate(sample = Sample_Name), by = "sample") %>%
   filter(!is.na(Batch)) %>%
+  filter(method %in% c("quantile", "beta", "mlm")) %>%
   mutate(Normalization = gsub("Normalization", "", Normalization),
          Normalization = recode(Normalization, "Functional" = "Func-minfi"),
-         method = factor(method, levels = c("quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd")),
-         method = recode(method, "isoforest" = "iForest", "mahdistmcd" = "mah-dist")) %>%
+         method = factor(method, levels = c("quantile", "beta", "mlm"))) %>%
   rbind(., mutate(ind.resid.df, Normalization = "Func-meffil")) %>%
   mutate(Normalization = factor(Normalization, 
                                 levels = c("Func-meffil", "Func-minfi", "Raw", "Illumina",
@@ -752,7 +751,7 @@ tech.norm.resid.epi <- rbind(mutate(norm.res.out, QC = "Raw"),
         panel.grid.major=element_blank())
 
 
-png("figures/INMA0.resid.techRep.Norm.epi.png", width = 1000, height = 700)
+png("figures/INMA0.resid.techRep.Norm.epi.png", width = 700, height = 500)
 tech.norm.resid.epi
 dev.off()
 
@@ -780,7 +779,7 @@ tech.resid.norm.plot <- norm.resid.out %>%
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 
-png("figures/INMA0.resid.techRep.Norm.png", width = 1000, height = 700)
+png("figures/INMA0.resid.techRep.Norm.png", width = 1000, height = 350)
 tech.resid.norm.plot
 dev.off()
 
@@ -858,7 +857,7 @@ tech.samesamp.norm.resid.outlier.plot <- tech.samesamp.norm.resid.quant %>%
 # dev.off()
 # 
 
-png("figures/INMA0.resid.sameSamp.Norm.propOverlap.panel.png", width = 1100)
+png("figures/INMA0.resid.sameSamp.Norm.propOverlap.panel.png", width = 800, height = 300)
 plot_grid(tech.samesamp.norm.resid.plot,tech.samesamp.norm.resid.outlier.plot, ncol = 2,
           labels = c("A", "B")) 
 dev.off()
@@ -1160,7 +1159,7 @@ batch.resid.epi.plot2 <-  batch.resid.quant %>%
         axis.text.x = element_text(angle=90, vjust=0.5),
         panel.grid.minor=element_blank(),
         panel.grid.major=element_blank())
-png("figures/INMA0.resid.batch.epi.png", width = 1200, height = 700)
+png("figures/INMA0.resid.batch.epi.png", width = 700, height = 600)
 # batch.resid.epi.plot
 plot_grid(batch.resid.epi.plot1, batch.resid.epi.plot2, rel_widths = c(2, 3))
 dev.off()
