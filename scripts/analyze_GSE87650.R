@@ -232,6 +232,8 @@ pcs.resid.plot <- data.frame(pcs_resid$x, disease = gset_filt$epi_disease) %>%
 #### PC recurr epimutations
 rec.cpgs <- subset(res.gse87650.cc.df, epi_region_id %in% recu.regs.cd)$cpg_ids
 rec.cpgs <- unique(unlist(strsplit(rec.cpgs, ",")))
+save(rec.cpgs, file =  "results/epimutations/GSE87650.recurrent.cpgs.Rdata")
+
 pcs_rec <- meffil.methylation.pcs(getBeta(gset_filt[rec.cpgs, ]), full.obj = TRUE,
                                   probe.range = 40000)
 rec.pcs.vars <- pcs_rec$sdev^2/sum(pcs_rec$sdev^2)
