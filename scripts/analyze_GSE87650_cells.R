@@ -386,7 +386,7 @@ rep.df <- res.gse87650.cell.loo.rep %>%
   group_by(Type) %>%
   mutate(p = n/sum(n)) 
 
-plotCase <- function(reg_name, res){
+plotCase <- function(reg_name, res, samp_name){
   
   selRows <- subset(res, reg_id == reg_name)
   
@@ -407,7 +407,8 @@ plotCase <- function(reg_name, res){
   
   plots <- lapply(cells, function(selcell) {
     p <- plot_epimutations(subset(selRows, cell == selcell), methy = gset_res_list[[selcell]]) +
-    ggtitle(selcell)
+    ggtitle(selcell) + scale_color_manual(labels = c("control", samp_name, "mean"), 
+                                            values = c("black", "red", "darkblue"))
     if (selcell == "wh blood"){
       p <- p + ggtitle("Whole blood")
     }
@@ -420,7 +421,7 @@ ex1 <- plotCase("chr12_10095902 9005", res.gse87650.cell.loo.filt)
 plot_grid(plotlist = ex1, ncol = 2 )
 
 ## Epimutation in 4 cell types
-ex2 <- plotCase("chr20_62886664 8975", res.gse87650.cell.loo.filt)
+ex2 <- plotCase("chr20_62886664 8975", res.gse87650.cell.loo.filt, "Samp_8975")
 plot_grid(plotlist = ex2[c(3, 1, 2, 4)], ncol = 2 )
 
 png("figures/GSE87650.replicateEpicell.png", width = 1000, height = 500)
@@ -445,7 +446,7 @@ plot_grid(plotlist = ex3, ncol = 2 )
 ## Epimutation in CD8
 subset(res.gse87650.cell.loo.rep, sigDatasets2  == "-CD8--") %>% 
   data.frame()
-ex5 <- plotCase("chr11_59823993 9034", res.gse87650.cell.loo.filt)
+ex5 <- plotCase("chr11_59823993 9034", res.gse87650.cell.loo.filt, "Samp_9034")
 
 png("figures/GSE87650.Epicell_specific.png", width = 1000, height = 500)
 plot_grid(plotlist = ex5[c(3, 1, 2, 4)], ncol = 2 )
@@ -687,7 +688,7 @@ eqtm_genes <- mclapply(res.gse87650.cell.loo.filt$cpg_ids, function(x) {
   if (nrow(tab) == 0){
     return(NA)
   } else {
-    unique(tab$CpG_gene)  
+    unique(tab$TC_gene )  
   }
 }, mc.cores = 5)
 
