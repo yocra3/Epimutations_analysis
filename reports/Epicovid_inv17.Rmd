@@ -1,0 +1,132 @@
+---
+title: "Inversion 17 in EPICOVID"
+author: "Carlos Ruiz"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+In this document, we analyze the possible association between inv17q21.31 and the risk of suffering severe COVID. We will infer inversion genotypes from DNA methylation data.
+
+
+```{r}
+library(tidyverse)
+library(cowplot)
+library(minfi)
+library(readxl)
+library(meffil)
+```
+
+# Data preparation
+
+## Load data
+```{r}
+load("../data/all_scoreinvhap_final.RData")
+load("../results/preprocess/GSE168739/GSE168739.normalizedComBat.autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata")
+
+pheno_scourge <- read_xlsx("../data/REV_PHENO_EUROPE.xlsx")
+index <- read_xlsx("../data/CIBERER_index_Carlos Ruiz.xlsx")
+colnames(index) <- c("CIBERER", "Interno", "Redcap")
+```
+
+## Map genotypes to DNA methylation
+```{r}
+cD <- colData(gset)
+cD <- left_join(as_tibble(cD), index, by = c("ID3" = "Redcap"))
+cD$ID_geno <- gsub("-", "_", cD$CIBERER)
+cD <- left_join(cD, all_inv, by = c("ID_geno" = "sample_ID"))
+cD$Batch2 <- recode(cD$Batch, "Aurora Pujol (IDIBELL)" = "IDIBELL",
+  "Francesc Vidal (Hospital Universitari Joan XXIII de Tarragona)" = "Joan XXIII",
+  "Israel Fernandez (Hospital Sant Pau)" = "Sant Pau",
+  "Pablo Lapunzina (Hospital Universitario La Paz)" = "La Paz",
+  "Pere Soler (Hospital Universitari Vall d’Hebron)" = "Vall d'Hebron")
+
+comb_pheno <- inner_join(cD, pheno_scourge, by = c("ID_geno" = "FID"))
+```
+
+
+# Inversions
+
+## Genotype inversions
+
+We will explore whether inv8p23.1, inv17q21.31 and inv16 have DNA methylation patterns that are associated with the inversion genotypes. To do so, we will run a PCA with the CpGs inside the inversion regions. Next, we will check whether individuals are clustered by inversion genotype.
+
+
+```{r}
+invs <- scoreInvHap::inversionGR[c("inv8_001" , "inv17_007", "inv16_009"  )]
+
+pcs <- lapply(seq_len(length(invs)), function(x){
+  mini <- subsetByOverlaps(gset, invs[x])
+  meffil.methylation.pcs(getBeta(mini))
+})
+
+names(pcs) <- c("inv8", "inv17", "inv16")
+
+
+inv <- paste0("inv", c(17, 8, 16))
+names(inv) <- inv
+
+invs_df <- data.frame(cD[, c("inv8_001", "inv17_007",  "inv16_009" )])
+colnames(invs_df) <- c("inv8", "inv17", "inv16")
+
+pc_plots_real <- lapply(inv, function(i){
+  df <- data.frame(pcs[[i]])
+  df$inv <- invs_df[, i]
+
+  ggplot(df, aes(x = PC1, y = PC2, color = inv)) +
+    geom_point() +
+    theme_bw() +
+  ggtitle(i)
+})
+```
+
+```{r}
+plot_grid(plotlist = pc_plots_real, ncol = 2)
+```
+
+Inversion inv17q21.31 shows three clear cluster in PC2 that map to the inversion genotypes. In inv8p23.1, we observe differences in methylation between the inversion genotypes, but the clustering is not clear. For inv16, we do not observe any clear signal in DNA methylation.
+
+Thus, we will select inv17q21.31 to associated it with disease severity.
+
+## Association with severity
+
+We will define the inv17q21.31 genotype using two approaches:
+
+- PC: use PC2 of the inversion region PCA
+- Additive: cluster individuals in three groups (Std-Std, Std-Inv and Inv-Inv) and run the association considering an additive model.
+
+In both cases, we will adjust the model for age and Sex.
+
+```{r}
+cD$inv17_pc <- pcs$inv17[, 2]
+cD$inv17_num <- ifelse(cD$inv17_pc < -0.3, 2, ifelse(cD$inv17_pc < 0, 1, 0))
+
+summary(glm(factor(Disease) ~ inv17_pc + age + Sex , family = "binomial", cD))
+summary(glm(factor(Disease) ~ inv17_num + age + Sex, family = "binomial", cD))
+```
+
+We observe that the inv17q21.31 is protective for suffering severe COVID.
+
+```{r}
+summary(glm(factor(Disease) ~ inv17_pc + age + Sex + CD4T + Bcell + CD8T + Eos + Mono + Neu + NK, family = "binomial", cD))
+summary(glm(factor(Disease) ~ inv17_num + age + Sex + CD4T + Bcell + CD8T + Eos + Mono + Neu + NK, family = "binomial", cD))
+```
+
+Nonetheless, when adjusting for cell types, this association is reduced. We observed that most cell types show strong differences between severe and assymptomatic patients.
+
+```{r}
+cells <- c("CD4T", "Bcell", "CD8T", "Eos", "Mono", "Neu", "NK")
+box_cells <- lapply(cells, function(i){
+  ggplot(cD, aes_string(x = "Disease", y = i)) +
+    geom_boxplot() +
+    theme_bw() +
+  ggtitle(i)
+})
+
+plot_grid(plotlist = box_cells, ncol = 3)
+```

@@ -56,8 +56,8 @@ tar -xvf data/GSE168739_RAW.tar -C data/GSE168739
 mkdir data/GSE51032
 tar -xvf data/GSE51032_RAW.tar -C data/GSE51032
 
-## Extract GSE51032
-mkdir data/GSE51032
-tar -xvf data/GSE51032_RAW.tar -C data/GSE51032
+## Extract GSE112611
+mkdir data/GSE112611
+tar -xvf data/GSE112611_RAW.tar -C data/GSE112611
 
 rsync -azvh --progress . ~/data/WS_HELIX/HELIX_analyses/epimutations_CR/

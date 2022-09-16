@@ -5,3 +5,8 @@
 .html
 data/
 results/
+figures/
+*.Rdata
+*.html
+*.png
+
