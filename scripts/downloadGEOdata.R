@@ -83,3 +83,70 @@ save(gset, file = "data/GSE84727/GSE84727.autosomic.filterAnnotatedProbes.withNA
 
 beta.pcs <- meffil.methylation.pcs(getBeta(gset), probe.range = 40000)
 ## No se ven outlier grandes de metilación
+
+
+# GSE112611 ####
+library(GEOquery)
+library(minfi)
+library(SummarizedExperiment)
+library(tidyverse)
+
+options(timeout = 10000)
+
+## Get phenotypes
+geo.full <- getGEO("GSE112611", GSEMatrix = TRUE)[[1]]
+
+## Prepare GenomicRatioSet ####
+raw_df <- read_delim("data/GSE112611_beta_values.txt.gz", delim = "\t")
+
+beta_mat <- select(raw_df, -starts_with(c("Detection", "ID"))) %>%
+  data.matrix()
+rownames(beta_mat) <- raw_df$ID_REF
+
+pMap <- data.frame(geo = colnames(geo.full), methy = geo.full$description)
+rownames(pMap) <- pMap$methy
+colnames(beta_mat) <- pMap[colnames(beta_mat), "geo"] 
+
+gset <- makeGenomicRatioSetFromMatrix(beta_mat, pData = pData(geo.full)[colnames(beta_mat), ],
+                                      array = "IlluminaHumanMethylationEPIC",
+                                      annotation = "ilm10b4.hg19")
+
+outPrefix <- "data/GSE112611/GSE112611"
+
+## Make matrix of detection p-values ####
+detP <- select(raw_df, starts_with("Detection")) %>%
+  data.matrix()
+rownames(detP) <- raw_df$ID_REF
+colnames(detP) <- colnames(beta_mat)
+detP <- detP[rownames(gset), colnames(gset)]
+save(gset, file = paste0(outPrefix, ".raw.GenomiRatioSet.Rdata"))
+save(detP, file = paste0(outPrefix, ".detectionPvalues.Rdata"))
+
+## Filter CpGs with call rate < 95%
+detP <- detP[rowMeans(detP < 2e-16) > 0.95, ]
+detP <- detP[, colMeans(detP < 2e-16) > 0.95]
+
+gset <- gset[rownames(detP), colnames(detP) ]
+save(gset, file = paste0(outPrefix, ".normalizedBeta.GenomiRatioSet.Rdata"))
+save(detP, file = paste0(outPrefix, ".detectionPvaluesfilt.Rdata"))
+
+## Process gset
+grAnnot <- readRDS("data/EPIC.hg19.manifest.rds")
+
+### Probes not measuring methylation
+gset <- dropMethylationLoci(gset)
+save(gset, file =  paste0(outPrefix,".allCpGs.GenomicRatioSet.Rdata"))
+
+### Remove crosshibridizing and probes with SNPs
+gset <- gset[!grAnnot[rownames(gset)]$MASK_general, ]
+save(gset, file = paste0(outPrefix,".filterAnnotatedProbes.GenomicRatioSet.Rdata"))
+
+### Remove probes in sexual chromosomes
+gset <- gset[!seqnames(rowRanges(gset)) %in% c("chrX", "chrY"), ]
+save(gset, file = paste0(outPrefix,".autosomic.filterAnnotatedProbes.GenomicRatioSet.Rdata"))
+
+detP <- detP[rownames(gset), colnames(gset)] 
+
+assay(gset)[detP > 2e-16] <- NA
+save(gset, file = paste0(outPrefix,".autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata"))
+

@@ -8,23 +8,30 @@
 library(GEOquery)
 library(minfi)
 library(meffil)
+library(tidyverse)
 
 options(mc.cores = 5)
 
 options(timeout = 10000)
 
 geo.full <- getGEO("GSE168739", GSEMatrix = TRUE)[[1]]
+phenos <- read_xlsx("data/EPICOVIDcohort_407pts.xlsx")
 
 ## Read samplesheet
 samplesheet <- meffil.create.samplesheet(path = "data/GSE168739/")
 samplesheet$Sex <- pData(geo.full)[samplesheet$Sample_Name, "gender:ch1"]
 samplesheet$age <- as.numeric(pData(geo.full)[samplesheet$Sample_Name, "age:ch1"])
+samplesheet$ID <- pData(geo.full)[samplesheet$Sample_Name, "description"]
+
+colnames(phenos) <- c("ID", "Batch", "ID2", "ID3", "Disease")
+samplesheet <- left_join(samplesheet, phenos, by = "ID")
+
 
 qc.objects <- meffil.qc(samplesheet, verbose = TRUE,  cell.type.reference="blood gse35069 complete")
 qc.parameters <- meffil.qc.parameters(
   beadnum.samples.threshold             = 0.1,
   detectionp.samples.threshold          = 0.1,
-  detectionp.cpgs.threshold             = 0.1, 
+  detectionp.cpgs.threshold             = 0.1,
   beadnum.cpgs.threshold                = 0.1,
   sex.outlier.sd                        = 5,
   snp.concordance.threshold             = 0.95,
@@ -65,7 +72,7 @@ while (nrow(outlier)> 0){
   round <- round + 1
   qc.objects <- meffil.remove.samples(qc.objects, outlier$sample.name)
   save(qc.objects, file = paste0(outPrefix,".qc.objects.round", round, ".Rdata"))
-  
+
   qc.summary <- meffil.qc.summary(qc.objects, parameters = qc.parameters)
   save(qc.summary, file = paste0(outPrefix, ".qcsummary.round", round, ".Rdata"))
   outlier <- qc.summary$bad.samples
@@ -98,17 +105,17 @@ for (i in seq_len(length(norm.objects))){
 }
 save(norm.objects, file = paste0(outPrefix, ".norm.obj.pc.Rdata"))
 
-norm.beta <- meffil.normalize.samples(norm.objects, cpglist.remove = qc.summary$bad.cpgs$name, 
+norm.beta <- meffil.normalize.samples(norm.objects, cpglist.remove = qc.summary$bad.cpgs$name,
                                       verbose = TRUE)
 beta.pcs <- meffil.methylation.pcs(norm.beta, probe.range = 40000)
 
-batch_var <- c("Slide", "sentrix_col",  "sentrix_row", "Sex", "age")
+batch_var <- c("Slide", "sentrix_col",  "sentrix_row", "Sex", "age", "Batch", "Disease")
 
 norm.parameters <- meffil.normalization.parameters(
   norm.objects,
   variables = batch_var,
-  control.pcs = seq_len(8),
-  batch.pcs = seq_len(8),
+  control.pcs = seq_len(5),
+  batch.pcs = seq_len(5),
   batch.threshold = 0.01
 )
 norm.summary <- meffil.normalization.summary(norm.objects, pcs = beta.pcs, parameters = norm.parameters)
@@ -130,5 +137,3 @@ gset <- makeGenomicRatioSetFromMatrix(norm.beta, pData = samplesheet.final,
                                       array = "IlluminaHumanMethylationEPIC",
                                       annotation = "ilm10b2.hg19")
 save(gset, file = paste0(outPrefix, ".normalizedRaw.GenomicRatioSet.Rdata"))
-
-
