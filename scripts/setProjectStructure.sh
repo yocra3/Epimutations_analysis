@@ -30,7 +30,7 @@ ln -s $HOME/data/WS_INMA/GWAS_INMA/QC/IMPUTATION_HRC_chrX_Michigan/ImpPLINK_QC d
 ### HELIX
 ln -s $HOME/data/WS_HELIX/HELIX_preproc/methylation/Final_data/methylome_subcohort_ComBatSlide_6cells_v4.Rdata data/HELIX.GenomicRatioSet.Rdata
 ln -s $HOME/data/WS_HELIX/HELIX_preproc/methylation/QC_CRA/detectionvals.RData data/HELIX.detectionPvals.Rdata
-ln -s ln -s /PROJECTES/HELIX_OMICS/data_final/trans/child/8y/blood_HTAv2_QChelix_20180701/transcriptome_subcohort_f1_v3.RData data/HELIX.genexp.Rdata
+ln -s /PROJECTES/HELIX_OMICS/data_final/trans/child/8y/blood_HTAv2_QChelix_20180701/transcriptome_subcohort_f1_v3.RData data/HELIX.genexp.Rdata
 ln -s $HOME/data/WS_INMA/gene_expression_4y/INMA_HTA-RMA/inma_expset_all_20180615.rda data/INMA4.genexp.Rdata
 ln -s $HOME/data/WS_HELIX/HELIX_preproc/methylation/Final_data/methylome_subcohort_v4.RData data/HELIX.noCombat.GenomicRatioSet.Rdata
 
@@ -38,7 +38,7 @@ ln -s $HOME/data/WS_HELIX/HELIX_preproc/exposome/FinalDataset/imppostnatal_v3.Rd
 ln -s $HOME/data/WS_HELIX/HELIX_preproc/exposome/FinalDataset/imppregnancy_v3.Rdata data/pregExposome.Rdata
 
 ## Add eQTM catalogue
-ln -s $HOME/data/WS_HELIX/HELIX_analyses/expr_met_SM/HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells_SIG.txt.gz data/eqtm.txt.gz
+ln -s ../expr_met_SM/HELIX_blood_eQTM_WebCat/eQTM_autosome_adj.cells_SIG.txt.gz data/eqtm.txt.gz
 
 ## Download CREs from ENCODE
 wget https://api.wenglab.org/screen_v13/fdownloads/GRCh38-ccREs.bed

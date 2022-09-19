@@ -798,6 +798,7 @@ plotSex <- function(set, range){
     scale_y_continuous(name = "DNA methylation", limits = c(0, 1)) +
     scale_x_continuous(name = "Coordinates") +
     theme_bw() +
+    scale_color_manual(values = c("#00C4AA", "#8700F9")) +
     theme(plot.title = element_text(hjust = 0.5))
 }
 
@@ -1273,8 +1274,8 @@ sab.replic.strict.plot <- sab.rep.res2 %>%
                                                 "Cord blood + 4 years + 8 years"))) %>%
   ggplot(aes(fill = category, color = category, y = p*100, x = method)) + 
   geom_bar(stat="identity") +
-  scale_fill_discrete(name = "Detection time point") +
-  scale_color_discrete(name = "Detection time point") +
+  scale_fill_manual(name = "Detection time point", values = c("#FE0000", "#FFFF01", "#0000FE", "#FF8000", "#9A0062", "#007502", "#000000")) +
+  scale_color_manual(name = "Detection time point", values = c("#FE0000", "#FFFF01", "#0000FE", "#FF8000", "#9A0062", "#007502", "#000000")) +
   scale_y_continuous(name = "Epimutations detected (%)") +
   theme_bw() +
   ggtitle("Epimutations called") +
@@ -1300,8 +1301,8 @@ sab.replic.signal.plot <- sab.rep.res2 %>%
                                                 "Cord blood + 4 years + 8 years"))) %>%
   ggplot(aes(fill = category, color = category, y = p*100, x = method)) + 
   geom_bar(stat="identity") +
-  scale_fill_discrete(name = "Detection time point") +
-  scale_color_discrete(name = "Detection time point") +
+  scale_fill_manual(name = "Detection time point", values = c("#FE0000", "#FFFF01", "#0000FE", "#FF8000", "#9A0062", "#007502", "#000000")) +
+  scale_color_manual(name = "Detection time point", values = c("#FE0000", "#FFFF01", "#0000FE", "#FF8000", "#9A0062", "#007502", "#000000")) +
   scale_y_continuous(name = "Epimutations detected (%)") +
   theme_bw() +
   ggtitle("Epimutations with signal") +
