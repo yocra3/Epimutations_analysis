@@ -41,30 +41,6 @@ res.inma0.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = 
 save(res.inma0.residuals.list, file = "results/epimutations/INMA0combined.raw.epimutations.allSamples.residuals.Rdata")
 
 
-## Batch ####
-inma0.esteller <- inma0[, inma0$Batch == "Esteller"]
-res.inma0.esteller.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.esteller, 
-                              BPPARAM = MulticoreParam(10, progressbar = TRUE))
-save(res.inma0.esteller.residuals.list, file = "results/epimutations/INMA0combined.raw.epimutations.esteller.residuals.Rdata")
-
-
-inma0.medall <- inma0[, inma0$Batch == "MeDALL"]
-res.inma0.medall.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.medall, 
-                               BPPARAM = MulticoreParam(10, progressbar = TRUE))
-save(res.inma0.medall.residuals.list, file = "results/epimutations/INMA0combined.raw.epimutations.medall.residuals.Rdata")
-
-## Sex ####
-inma0.boys <- inma0[, inma0$Sex == "M"]
-res.inma0.boys.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.boys, 
-                                        BPPARAM = MulticoreParam(10, progressbar = TRUE))
-save(res.inma0.boys.residuals.list, file = "results/epimutations/INMA0combined.raw.epimutations.boys.residuals.Rdata")
-
-
-inma0.girls <- inma0[, inma0$Sex == "F"]
-res.inma0.girls.residuals.list <- lapply(methods, epimutations_one_leave_out, methy = inma0.girls, 
-                                         BPPARAM = MulticoreParam(10, progressbar = TRUE))
-save(res.inma0.girls.residuals.list, file = "results/epimutations/INMA0combined.raw.epimutations.girls.residuals.Rdata")
-
 ### Use as reference the other sex
 res.inma0.boys.girlsref.residuals.list <- mclapply(methods, epimutations, 
                                                    case_samples = inma0.boys, 

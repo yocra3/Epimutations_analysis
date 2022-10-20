@@ -4,6 +4,7 @@
 #'#################################################################################
 #'#################################################################################
 
+## Download data from GEO (bash)
 wget 'https://ftp.ncbi.nlm.nih.gov/geo/series/GSE83nnn/GSE83424/matrix/GSE83424_series_matrix.txt.gz' -p data
 
 ## Load libraries
@@ -11,9 +12,13 @@ library(GEOquery)
 library(minfi)
 library(tidyverse)
 
+## Load data 
 geo.full <- parseGEO("data/GSE83424_series_matrix.txt.gz")
 
+## Convert matrix to GenomicRatioSet
 gse83424 <- makeGenomicRatioSetFromMatrix(exprs(geo.full), pData = pData(geo.full))
+
+## Set clearer variable names
 gse83424$sex <- gse83424$`gender:ch1`
 gse83424$status <- gse83424$`status:ch1`
 
@@ -47,6 +52,7 @@ qc.objects <- meffil.qc(samplesheet, verbose=TRUE)
 dp <- meffil.load.detection.pvalues(qc.objects)
 save(dp, file = paste0(outPrefix, ".detection_pvalues.Rdata"))
 
+## Set to NA measurements with detection p-values > 2e-16
 dp.f <- dp[rownames(gset), colnames(gset)]
 beta <- assay(gset)
 beta[dp.f > 2e-16] <- NA
