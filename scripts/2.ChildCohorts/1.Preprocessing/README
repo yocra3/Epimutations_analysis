@@ -1,0 +1,2 @@
+Preprocessing with meffil was run using run_Methylation_QC.R. The parameters for this script were taken from the QC_*.R files.
+Normalization using different minfi methods was run using run_Methylation_QC_minfi.R

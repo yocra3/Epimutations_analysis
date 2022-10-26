@@ -96,7 +96,7 @@ arrange(recur.disease.epi, desc(freq))
 
 gse83424.recur.epi <- filter(gse83424.cc.df, epi_region_id %in% subset(recur.disease.epi, n >= 3)$epi_region_id) %>%
   group_by(epi_region_id) %>%
-  summarize(samples = paste(sample, collapse = ";"),
+  summarize(samples = paste(title, collapse = ";"),
             chromosome = unique(chromosome),
             start = min(start),
             end = max(end),
@@ -447,6 +447,7 @@ prior.epi4 <- plot_epimutations_group(reg4, reg4$sample, gset) + ggtitle("PHACTR
                                      labels = c("Control", "Control mean", "Case", reg4$title)) +
                   xlim(c(min(reg4$start) - 20, max(reg4$end) + 20))
 
+## Sup Figure 29
 png("figures/GSE83424.priorEpimutations.png", width = 800, height = 600)
 plot_grid(prior.epi1, prior.epi2, prior.epi3, prior.epi4, ncol = 2, labels = LETTERS[1:4])
 dev.off()
@@ -489,6 +490,7 @@ disease.burden <- gse83424.loo.sum %>%
   scale_color_discrete(name = "Epimutations per sample") +
   scale_fill_discrete(name = "Epimutations per sample")
 
+## Sup Figure 30
 png("figures/GSE83424.diseaseburden.png", width = 500, height = 300)
 disease.burden
 dev.off()

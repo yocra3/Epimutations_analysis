@@ -42,9 +42,6 @@ runEpimutations <- function(gset, samps, params = epi_parameters()){
   res <- mclapply(methods, epimutations, case_samples = cases, control_panel = controls, 
                   epi_params = params, mc.cores = 6)
 }
-res_joint <- runEpimutations(gsetcomb, samps)
-save(res_joint, file = "results/epimutations/INMA_comb.raw.epimutations.INMA0.duplicates.Rdata")
-
 res_indep <- runEpimutations(gset0, samps)
 save(res_indep, file = "results/epimutations/INMA0combined.raw.epimutations.INMA0.duplicates.Rdata")
 
@@ -62,8 +59,6 @@ getResiduals <- function(gset){
 }
 gsetcomb_res <- getResiduals(gsetcomb)
 save(gsetcomb_res, file = "INMA_comb.raw.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
-res_joint_resid <- runEpimutations(gsetcomb_res, samps)
-save(res_joint_resid, file = "results/epimutations/INMA_comb.raw.epimutations.INMA0.duplicates.residuals.Rdata")
 
 gset0_res <- getResiduals(gset0)
 save(gset0_res, file = "INMA0combined.raw.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")

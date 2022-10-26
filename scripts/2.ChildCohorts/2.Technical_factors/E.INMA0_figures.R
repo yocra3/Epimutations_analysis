@@ -11,7 +11,7 @@ library(tidyverse)
 library(cowplot)
 library(ggh4x)
 library(readxl)
-
+library(viridis)
 
 getMeanQuantile <- function(cpgs, sampid, set){
   idnum <- colData(set)[sampid, "idnum"]
@@ -39,9 +39,19 @@ getMeanQuantile2 <- function(cpgs, sampid, set, rep_quant){
   mean(quant)
 }
 
-# Normalization PCAs ####
+getMeanDifference <- function(cpgs, ref, case){
+  cpgs <- cpgs[cpgs %in% rownames(ref)]
+  betas <- getBeta(ref[cpgs, ])
+  means <- rowMedians(betas, na.rm = TRUE)
+  diff  <- getBeta(case[cpgs, ]) - means
+  mean(diff, na.rm = TRUE)
+}
+
+
+# Normalization PCAs (Sup Figure 8) ####
 ## Independent normalization ####
 load("INMA0combined.normalizedRaw.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+load("INMA.commonControlSamples.Rdata")  
 INMA_ind <- gset
 
 ind.pcs <- meffil.methylation.pcs(getBeta(INMA_ind), probe.range = 40000, full.obj = TRUE)
@@ -66,7 +76,7 @@ ind.pcs.df$type <- factor(ifelse(ind.pcs.df$dup, idnum.tab.indep[as.character(in
 ind.pcs.vars <- ind.pcs$sdev^2/sum(ind.pcs$sdev^2)
 indep_pc <- ggplot(ind.pcs.df, aes(x = PC1, y = PC2, color = type)) +
   geom_point() +
-  scale_color_manual(name = "Batch", values = c("blue", "red", "grey", "black")) +
+  scale_color_manual(name = "Batch", values = c("#F0E68C", "#228B22", "#4169E1", "#DC143C")) +
   geom_line(data = subset(ind.pcs.df, dup), aes(group = idnum)) +
   theme_bw() +
   ggtitle("Independent Normalization") +
@@ -75,12 +85,6 @@ indep_pc <- ggplot(ind.pcs.df, aes(x = PC1, y = PC2, color = type)) +
     theme(plot.title = element_text(hjust = 0.5), 
         legend.position = "none")
 summary(lm(PC1 ~ Batch, ind.pcs.df))
-
-# png("figures/INMA0.indepNorm.PCA.png")
-# indep_pc
-# dev.off()
-
-
 
 ## Joint normalization ####
 load("INMA_comb.normalizedRaw.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
@@ -110,21 +114,17 @@ joint_pc <- joint.pcs.df %>%
   filter(!(type == "Replicate same batch" & Batch2 == "Alternative")) %>%
   ggplot(aes(x = PC1, y = PC2, color = type)) +
   geom_point() +
-  scale_color_manual(name = "Batch", values = c("blue", "red", "grey", "black")) +
+  scale_color_manual(name = "Batch", values = c("#F0E68C", "#228B22", "#4169E1", "#DC143C")) +
   geom_line(data = subset(joint.pcs.df, dup & !(type == "Replicate same batch" & Batch2 == "Alternative")), aes(group = idnum)) +
   scale_x_continuous(name = paste0("PC1 (", round(joint.pcs.vars[1]*100, 1), "%)")) +
   scale_y_continuous(name = paste0("PC2 (", round(joint.pcs.vars[2]*100, 1), "%)")) +
   theme_bw() +
-  ggtitle("Joint Normalization") +
+  ggtitle("Combined Normalization") +
   theme(plot.title = element_text(hjust = 0.5))
 
 summary(lm(PC1 ~ Batch, joint.pcs.df))
 
-# png("figures/INMA0.jointNorm.PCA.png")
-# joint_pc
-# dev.off()
-# 
-
+## Sup Figure 8
 png("figures/INMA0.PCA_panel.png", width = 600, height = 300)
 plot_grid(indep_pc, joint_pc, labels = "AUTO", nrow = 1, rel_widths = c(5, 8))
 dev.off()
@@ -133,7 +133,6 @@ dev.off()
 
 # Merge epimutations datasets ####
 load("results/epimutations/INMA0combined.raw.epimutations.INMA0.duplicates.Rdata")
-load("results/epimutations/INMA_comb.raw.epimutations.INMA0.duplicates.Rdata")
 
 ind.res.df <- Reduce(rbind, res_indep) %>%
   mutate(method = rep(names(res_indep), sapply(res_indep, nrow))) %>%
@@ -145,65 +144,22 @@ ind.res.df <- Reduce(rbind, res_indep) %>%
   mutate(Normalization = "Independent",
          method = factor(method, levels = c("quantile", "beta", "mlm")))
 
-comb.res.df <- Reduce(rbind, res_joint) %>%
-  mutate(method = rep(names(res_joint), sapply(res_joint, nrow))) %>%
-  left_join(joint.pcs.df %>% 
-              select(Sample_Name, type, idnum, Batch) %>% 
-              mutate(sample = Sample_Name), by = "sample") %>%
-  filter(method %in% c("quantile", "beta", "mlm")) %>%
-  mutate(Normalization = "Independent",
-         method = factor(method, levels = c("quantile", "beta", "mlm")))
-
-comSamps <- intersect(unique(ind.res.df$sample), unique(comb.res.df$sample))
-
-all.res.df <- rbind(ind.res.df, comb.res.df) %>%
-  filter(sample %in% comSamps)
 
 
-# Technical replicates in Esteller ####
-## Total epimutations ####
-ind.res.df %>%
-  filter(type == "Replicate same batch") %>%
-  group_by(Normalization, method, idnum, epi_region_id) %>%
-  summarize(n = sum(chromosome != 0)) %>%
-  filter(!is.na(epi_region_id)) %>%
-  group_by(method, idnum) %>%
-  summarize(N = length(unique(epi_region_id))) %>%
-  spread(idnum, N)
 
-
-## Epimutations per replicate ####
-# tech.ind.plot <- ind.res.df %>%
-#   filter(chromosome != 0 & type == "Replicate same batch") %>%
-#   group_by(method, idnum, epi_region_id) %>%
-#   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", "One replicate")) %>%
-#   group_by(idnum) %>%
-#   count(method, epi_type) %>% 
-#   complete(method, epi_type, fill = list(n = 0)) %>%
-#   ggplot(aes(x = method, y = n, fill = epi_type)) +
-#   geom_bar(position = "dodge", stat = "identity") +
-#   theme_bw() +
-#   scale_y_continuous(name = "Total epimutations detected", breaks = seq(0, 10, 2)) +
-#   scale_x_discrete(name = "Algorithm", drop = FALSE) +
-#   scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "brown")) +
-#   facet_grid(idnum ~ .)
-# 
-# # png("figures/INMA0.techRep.ind.png", height = 300)
-# # tech.ind.plot
-# # dev.off()
-
-
+# Technical replicates in Lab 1 ####
 ind.res.tech.rep <- ind.res.df %>%
   filter(chromosome != 0 & type == "Replicate same batch") %>%
   mutate(rep_quant = sapply(seq_len(nrow(.)), function(i) 
     getMeanQuantile(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$sample, 
                     INMA_ind[, INMA_ind$Batch == "Esteller"]))) 
 
+## Figure 4A
 tech.ind.top.plot <- ind.res.tech.rep %>%
   group_by(method, idnum, epi_region_id) %>%
   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
                               ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", "One replicate"))) %>%
-  mutate(epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "One replicate"))) %>%
+  mutate(epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal"))) %>%
   ungroup() %>%
   count(method, idnum, epi_type) %>% 
   complete(method, idnum,  epi_type, fill = list(n = 0)) %>%
@@ -212,12 +168,9 @@ tech.ind.top.plot <- ind.res.tech.rep %>%
   theme_bw() +
   scale_y_continuous(name = "Total epimutations detected", breaks = seq(0, 10, 2)) +
   scale_x_discrete(name = "Algorithm", drop = FALSE) +
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1")) +
   facet_grid(. ~ idnum)
 
-png("figures/INMA0.techRep.ind.top.png", height = 300, width = 500)
-tech.ind.top.plot
-dev.off()
 
 
 ind.res.tech.rep %>%
@@ -240,7 +193,7 @@ ind.res.tech.rep %>%
   complete(method, epi_type, fill = list(n = 0)) %>%
   spread(epi_type, n)
 
-
+## Sup Figure 5
 tech.rep.epi.plot <- ind.res.tech.rep %>%
 group_by(method, idnum, epi_region_id) %>%
   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
@@ -251,7 +204,7 @@ group_by(method, idnum, epi_region_id) %>%
   geom_tile() +
   theme_bw() +
   facet_grid(idnum ~ ., scales = "free") + 
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "brown")) +
   scale_y_discrete(name = "Epimutations") +
   scale_x_discrete(name = "Algorithm") +
   theme(axis.text.y = element_blank(),
@@ -303,7 +256,7 @@ norm.res.out <- norm.res.df %>%
   mutate(rep_quant = sapply(seq_len(nrow(.)), function(i) 
     getMeanQuantile(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$sample, norm_set_list[[.[i, ]$Normalization]]))) 
 
-
+### Sup Figure 6
 tech.norm.plot <- norm.res.out %>%
   filter(chromosome != 0 & type == "Replicate same batch") %>%
   group_by(Normalization, method, idnum, epi_region_id) %>%
@@ -321,8 +274,8 @@ tech.norm.plot <- norm.res.out %>%
   facet_grid(method ~ Normalization) +
   scale_y_continuous(name = "Total epimutations detected") +
   scale_x_discrete(drop = FALSE) +
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
-  scale_color_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "grey")) +
+  scale_color_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "grey")) +
   theme(axis.title.x=element_blank(),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
@@ -331,7 +284,7 @@ png("figures/INMA0.techRep.Norm.png", width = 700, height = 250)
 tech.norm.plot
 dev.off()
 
-
+## Sup Figure 7
 tech.num.norm.epi.plot <- norm.res.out %>%
   filter(chromosome != 0 & type == "Replicate same batch") %>%
   group_by(Normalization, method, idnum, epi_region_id) %>%
@@ -343,7 +296,7 @@ tech.num.norm.epi.plot <- norm.res.out %>%
   geom_tile() +
   theme_bw() +
   facet_grid(idnum ~ method, scale = "free_y") + 
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "grey")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -367,9 +320,17 @@ tech.samesamp.norm.quant <- norm.res.df %>%
   mutate(rep_quant2 = sapply(seq_len(nrow(.)), function(i) 
     getMeanQuantile2(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$Sample_Name, 
                      norm_set_list[[.[i, ]$Normalization]],
-                     .[i, ]$rep_quant))) 
+                     .[i, ]$rep_quant)))
+
+norm.res.df_mean <-  norm.res.df %>%
+  filter(chromosome != 0 & Batch == "Esteller") %>%
+  mutate(diff_median = sapply(seq_len(nrow(.)), function(i) 
+      getMeanDifference(strsplit(.[i, ]$cpg_ids, ",")[[1]], 
+                        ref = norm_set_list[[.[i, ]$Normalization]][, samps], 
+                        case = norm_set_list[[.[i, ]$Normalization]][, .[i, ]$Sample_Name])))
 
 
+### Sup Figure 3
 tech.samesamp.norm.plot <- norm.res.df %>%
   filter(chromosome != 0 & Batch == "Esteller") %>%
   group_by(method, Sample_Name, epi_region_id) %>%
@@ -378,21 +339,17 @@ tech.samesamp.norm.plot <- norm.res.df %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms),
+  mutate(n_norms = factor(n_norms, levels = 7:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
   theme_bw() +
   scale_y_continuous(name = "Proportion of epimutations (%)") +
   scale_x_discrete(name = "Method") +
-  scale_fill_discrete("N Norm. Algorithm") +
-  scale_color_discrete("N Norm. Algorithm") +
+  scale_fill_viridis("N Norm. Algorithm", discrete = TRUE) +
+  scale_color_viridis("N Norm. Algorithm", discrete = TRUE) +
   ggtitle("Only epimutations detected") + 
   theme(plot.title = element_text(hjust = 0.5))
-
-# png("figures/INMA0.sameSamp.Norm.propOverlap.png", height = 300)
-# tech.samesamp.norm.plot
-# dev.off()
 
 
 tech.samesamp.norm.outlier.plot <- tech.samesamp.norm.quant %>%
@@ -407,28 +364,23 @@ tech.samesamp.norm.outlier.plot <- tech.samesamp.norm.quant %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms),
+  mutate(n_norms = factor(n_norms, levels = 7:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
   theme_bw() +
   scale_y_continuous(name = "Proportion of epimutations (%)") +
   scale_x_discrete(name = "Method") +
-  scale_fill_discrete("N Norm. Algorithm") +
-  scale_color_discrete("N Norm. Algorithm") +
+  scale_fill_viridis("N Norm. Algorithm", discrete = TRUE) +
+  scale_color_viridis("N Norm. Algorithm", discrete = TRUE) +
   ggtitle("Epimutations detected and outlier signals") + 
   theme(plot.title = element_text(hjust = 0.5))
-
-# png("figures/INMA0.sameSamp.Norm.outlier.propOverlap.png", height = 300)
-# tech.samesamp.norm.outlier.plot
-# dev.off()
 
 
 png("figures/INMA0.sameSamp.Norm.propOverlap.panel.png", width = 800, height = 300)
 plot_grid(tech.samesamp.norm.plot,tech.samesamp.norm.outlier.plot, ncol = 2,
           labels = c("A", "B")) 
 dev.off()
-
 
 
 norm.res.df %>%
@@ -460,7 +412,7 @@ tech.samesamp.norm.quant %>%
          prop = n/sum(n)*100) %>%
   select(-n) %>% spread(n_norms, prop)
 
-## Epimutations plot ####
+## Epimutations plot (Sup Figure 4) ####
 tech.samesamp.norm.epi.plot1 <- tech.samesamp.norm.quant %>%
   mutate(rep_norm = pmin(rep_quant2, 1 - rep_quant2)) %>%
   filter(rep_norm < 0.05) %>%
@@ -476,7 +428,7 @@ tech.samesamp.norm.epi.plot1 <- tech.samesamp.norm.quant %>%
   geom_tile() +
   theme_bw() +
   facet_grid(Sample_Name ~ method, scales = "free_y", space = "free") + 
-  scale_fill_manual(name = "", values = c("darkgoldenrod2", "gray", "white")) +
+  scale_fill_manual(name = "", values = c("darkorchid4", "darkorchid1", "white")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -499,7 +451,7 @@ tech.samesamp.norm.epi.plot2 <- tech.samesamp.norm.quant %>%
   geom_tile() +
   theme_bw() +
   facet_grid(Sample_Name ~ method, scales = "free_y", space = "free") + 
-  scale_fill_manual(name = "", values = c("darkgoldenrod2", "gray", "white")) +
+  scale_fill_manual(name = "", values = c("darkorchid4", "darkorchid1", "white")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -513,30 +465,7 @@ plot_grid(tech.samesamp.norm.epi.plot1, tech.samesamp.norm.epi.plot2, ncol = 2, 
 dev.off()
 
 
-tech.samesamp.norm.epi2.plot <- tech.samesamp.norm.quant %>%
-  mutate(rep_norm = pmin(rep_quant2, 1 - rep_quant2)) %>%
-  filter(rep_norm < 0.05) %>%
-  mutate(epi_cat = ifelse(!is.na(rep_quant), "Epimutation", "Outlier signal"), 
-         epi_cat = factor(epi_cat, levels = c("Epimutation", "Outlier signal", "No signal")),
-         epi_id = paste(Sample_Name, epi_region_id)) %>%
-  ggplot(aes(x = Normalization, y = epi_id, fill = epi_cat)) +
-  geom_tile() +
-  theme_bw() +
-  facet_wrap( ~ method, scales = "free_y") + 
-  scale_fill_manual(name = "", values = c("darkgoldenrod2", "gray", "white")) +
-  scale_y_discrete(name = "Epimutations") +
-  theme(axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.x = element_text(angle=90, vjust=0.5),
-        panel.grid.minor=element_blank(),
-        panel.grid.major=element_blank())
-
-
-png("figures/INMA0.sameSamp.Norm.epi2.png")
-tech.samesamp.norm.epi2.plot
-dev.off()
-
-# Diff batch tech replicates ####
+# Diff batch technical replicates ####
 #'###############################################################################
 
 ## Prepare data ####
@@ -548,77 +477,8 @@ ind.techbatch.df  <- ind.res.df %>%
   mutate(rep_quant = sapply(seq_len(nrow(.)), function(i) 
     getMeanQuantile(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$sample, batch_list[[.[i, ]$Normalization]]))) 
 
-## Boxplot ####
-batch.boxplot <- ind.techbatch.df %>%
-  filter(!is.na(rep_quant)) %>%
-  group_by(method, idnum, epi_region_id) %>%
-  summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-                              ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", 
-                                     ifelse(grepl("04", unique(Sample_Name)), "Alternative", "Reference")))) %>%
-  mutate(epi_id = paste(idnum, epi_region_id),
-         epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "Reference", "Alternative"))) %>%
-  count(method, epi_type, idnum) %>% 
-  complete(method, epi_type, idnum, fill = list(n = 0)) %>%
-  mutate(n = pmin(n, 150)) %>%
-  ggplot(aes(x = method, y = n, color = epi_type)) +
-  geom_boxplot() +
-  theme_bw() +
-  scale_y_continuous(name = "Total epimutations detected") +
-  scale_x_discrete(drop = FALSE) +
-  scale_color_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "darkgreen", "blue")) 
-  
-png("figures/INMA0.batch.indep.boxplot.png")
-batch.boxplot
-dev.off()
-
-
-ind.techbatch.df %>%
-  filter(!is.na(rep_quant)) %>%
-  group_by(method, idnum, epi_region_id) %>%
-  summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-                              ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", 
-                                     ifelse(grepl("04", unique(Sample_Name)), "Alternative", "Reference")))) %>%
-  mutate(epi_id = paste(idnum, epi_region_id),
-         epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "Reference", "Alternative"))) %>%
-  count(method, epi_type, idnum) %>% 
-  complete(method, epi_type, idnum, fill = list(n = 0)) %>%
-  group_by(method, idnum) %>%
-  mutate(p = n/sum(n)) %>%
-  filter(!is.na(p)) %>%
-  group_by(method, epi_type) %>%
-  summarize(mean = median(p)) %>%
-  spread(epi_type, mean) %>%
-  ungroup() %>%
-  data.frame()
-
-## Epimutations plot ####
-# batch.ind.epi.plot <- ind.techbatch.df %>%
-#   group_by(Normalization, method, idnum, epi_region_id) %>%
-#   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-#                               ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", 
-#                                      ifelse(grepl("04", unique(Sample_Name)), "Alternative", "Reference")))) %>%
-#   mutate(epi_id = paste(idnum, epi_region_id),
-#          epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "Reference", "Alternative"))) %>%
-#   ggplot(aes(x = Normalization, y = epi_id, fill = epi_type)) +
-#   geom_tile() +
-#   theme_bw() +
-#   facet_grid(idnum ~ method, scales = "free_y", space="free") + 
-#   scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "darkgreen", "blue")) +
-#   scale_y_discrete(name = "Epimutations") +
-#   theme(axis.text.y = element_blank(),
-#         axis.ticks.y = element_blank(),
-#         axis.text.x = element_text(angle=90, vjust=0.5),
-#         panel.grid.minor=element_blank(),
-#         panel.grid.major=element_blank())
-# png("figures/INMA0.batch.epi.png", width = 600, height = 800)
-# batch.ind.epi.plot
-# dev.off()
-# 
-
-
 # Same batch rep. - residuals ####
 ## Prepare data ####
-load("results/epimutations/INMA_comb.raw.epimutations.INMA0.duplicates.residuals.Rdata")
 load("results/epimutations/INMA0combined.raw.epimutations.INMA0.duplicates.residuals.Rdata")
 load("INMA0combined.raw.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
 load("INMA_comb.raw.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
@@ -647,31 +507,8 @@ tech.resid.quant <- ind.comb.df %>%
   mutate(rep_quant = sapply(seq_len(nrow(.)), function(i) 
     getMeanQuantile(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$sample, esteller_resid_list[[.[i, ]$QC]]))) 
 
-# 
-# tech.resid.plot <- tech.resid.quant %>%
-#    group_by(QC, method, idnum, epi_region_id) %>%
-#   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-#                               ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", "One replicate"))) %>%
-#   mutate(epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "One replicate"))) %>%
-#   ungroup() %>%
-#   count(QC, method, epi_type, idnum) %>% 
-#   complete(QC, method, epi_type, idnum, fill = list(n = 0)) %>%
-#   ggplot(aes(x = method, y = n, color = epi_type, fill = epi_type)) +
-#   geom_bar(position = "dodge", stat = "identity") +
-#   theme_bw() +
-#   scale_y_continuous(name = "Total epimutations detected", breaks = seq(0, 12, 2)) +
-#   scale_x_discrete(name = "Algorithm", drop = FALSE) +
-#   scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
-#   scale_color_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
-#   facet_grid(idnum ~ QC)
-# 
-# png("figures/INMA0.techRep.resid.png", height = 300, width = 1000)
-# tech.resid.plot
-# dev.off()
-# 
 
-
-## Epimutation plot ####
+## Epimutation plot (Sup Figure 12) ####
 tech.resid.epi.plot <- tech.resid.quant %>%
   group_by(QC, method, idnum, epi_region_id) %>%
   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
@@ -682,7 +519,7 @@ tech.resid.epi.plot <- tech.resid.quant %>%
   geom_tile() +
   theme_bw() +
   facet_grid(idnum ~ method, scales = "free_y", space = "free_y") + 
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "grey")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -742,7 +579,7 @@ tech.norm.resid.epi <- rbind(mutate(norm.res.out, QC = "Raw"),
   geom_tile() +
   theme_bw() +
   facet_grid(Normalization ~ method, scales = "free_y", space = "free_y") + 
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "gray")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -750,37 +587,9 @@ tech.norm.resid.epi <- rbind(mutate(norm.res.out, QC = "Raw"),
         panel.grid.minor=element_blank(),
         panel.grid.major=element_blank())
 
-
+## Sup Figure 13
 png("figures/INMA0.resid.techRep.Norm.epi.png", width = 700, height = 500)
 tech.norm.resid.epi
-dev.off()
-
-
-tech.resid.norm.plot <- norm.resid.out %>%
-  filter(chromosome != 0 & type == "Replicate same batch") %>%
-  group_by(Normalization, method, idnum, epi_region_id) %>%
-  summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-                              ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", "One replicate"))) %>%
-  mutate(epi_name = paste(method, idnum, epi_region_id, Normalization),
-         epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "One replicate"))) %>%
-  ungroup() %>%
-  count(Normalization, method, epi_type) %>% 
-  complete(Normalization, method, epi_type, fill = list(n = 0)) %>%
-  ggplot(aes(x = epi_type, y = n, color = epi_type, fill = epi_type)) +
-  geom_bar(position = "dodge", stat = "identity") +
-  geom_text(aes(y = n + 1, label = n)) +
-  theme_bw() +
-  facet_grid(method ~ Normalization) +
-  scale_y_continuous(name = "Total epimutations detected") +
-  scale_x_discrete(drop = FALSE) +
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
-  scale_color_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "brown")) +
-  theme(axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())
-
-png("figures/INMA0.resid.techRep.Norm.png", width = 1000, height = 350)
-tech.resid.norm.plot
 dev.off()
 
 
@@ -800,7 +609,7 @@ tech.samesamp.norm.resid.quant <- norm.resid.df %>%
 
 
 # Diff. norm. - same samp- resid ####
-## Overlap ####
+## Overlap (Sup Figure 11) ####
 tech.samesamp.norm.resid.plot <- norm.resid.df %>%
   filter(chromosome != 0 & Batch == "Esteller") %>%
   group_by(method, Sample_Name, epi_region_id) %>%
@@ -809,23 +618,17 @@ tech.samesamp.norm.resid.plot <- norm.resid.df %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms),
+  mutate(n_norms = factor(n_norms, levels = 7:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
   theme_bw() +
   scale_y_continuous(name = "Proportion of epimutations (%)", limits = c(0, 100)) +
   scale_x_discrete(name = "Method") +
-  scale_fill_discrete("N Norm. Algorithm") +
-  scale_color_discrete("N Norm. Algorithm") +
+  scale_fill_viridis("N Norm. Algorithm", discrete = TRUE) +
+  scale_color_viridis("N Norm. Algorithm", discrete = TRUE) +
   ggtitle("Only epimutations detected") + 
   theme(plot.title = element_text(hjust = 0.5))
-
-# 
-# png("figures/INMA0.resid.sameSamp.Norm.propOverlap.png", height = 300)
-# tech.samesamp.norm.resid.plot
-# dev.off()
-
 
 
 tech.samesamp.norm.resid.outlier.plot <- tech.samesamp.norm.resid.quant %>%
@@ -840,30 +643,26 @@ tech.samesamp.norm.resid.outlier.plot <- tech.samesamp.norm.resid.quant %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms),
+  mutate(n_norms = factor(n_norms, levels = 7:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
   theme_bw() +
   scale_y_continuous(name = "Proportion of epimutations (%)") +
   scale_x_discrete(name = "Method") +
-  scale_fill_discrete("N Norm. Algorithm") +
-  scale_color_discrete("N Norm. Algorithm") +
+  scale_fill_viridis("N Norm. Algorithm", discrete = TRUE) +
+  scale_color_viridis("N Norm. Algorithm", discrete = TRUE) +
   ggtitle("Epimutations detected and outlier signals") + 
   theme(plot.title = element_text(hjust = 0.5))
 
-# png("figures/INMA0.resid.sameSamp.Norm.outlier.propOverlap.png", height = 300)
-# tech.samesamp.norm.resid.outlier.plot
-# dev.off()
-# 
-
+##  Sup Figure 11
 png("figures/INMA0.resid.sameSamp.Norm.propOverlap.panel.png", width = 800, height = 300)
 plot_grid(tech.samesamp.norm.resid.plot,tech.samesamp.norm.resid.outlier.plot, ncol = 2,
           labels = c("A", "B")) 
 dev.off()
 
 
-## Epimutations plot ####
+## Epimutations plot (Sup Figure 4) ####
 tech.samesamp.resid.norm.epi.plot <- rbind(mutate(tech.samesamp.norm.resid.quant, QC = "Residuals"),
                                            mutate(tech.samesamp.norm.quant, QC = "Raw")) %>%
   mutate(rep_norm = pmin(rep_quant2, 1 - rep_quant2)) %>%
@@ -903,7 +702,7 @@ norm.resid.df %>%
 
 # Diff. batch tech rep. - residuals ####
 ## Normalization PCAs ####
-### Independent normalization ####
+### Independent normalization (Sup Figure 9) ####
 ind.resid.pcs <- meffil.methylation.pcs(getBeta(gset0_res), probe.range = 40000, full.obj = TRUE)
 ind.resid.pcs.df <- ind.resid.pcs$x %>%
   data.frame() %>%
@@ -927,7 +726,7 @@ ind.resid.pcs.vars <- ind.resid.pcs$sdev^2/sum(ind.resid.pcs$sdev^2)
 indep_resid_pc <- ggplot(ind.resid.pcs.df, aes(x = PC1, y = PC2, color = type)) +
   geom_point() +
   geom_line(data = subset(ind.resid.pcs.df, dup & !(type == "Replicate same batch" & Batch2 == "Alternative")), aes(group = idnum)) +
-  scale_color_manual(name = "Batch", values = c("blue", "red", "grey", "black")) +
+  scale_color_manual(name = "Batch", values = c("#F0E68C", "#228B22", "#4169E1", "#DC143C")) +
   theme_bw() +
   ggtitle("After residuals extraction") +
   scale_x_continuous(name = paste0("PC1 (", round(ind.resid.pcs.vars[1]*100, 1), "%)")) +
@@ -936,65 +735,12 @@ indep_resid_pc <- ggplot(ind.resid.pcs.df, aes(x = PC1, y = PC2, color = type)) 
 summary(lm(PC1 ~ Batch, ind.resid.pcs.df))
 summary(lm(PC2 ~ Batch, ind.resid.pcs.df))
 
+## Sup Figure 8
 png("figures/INMA0.indepNorm.resid.PCA.png", height = 300, width = 400)
 indep_resid_pc
 dev.off()
 
-
-# 
-# ## Joint normalization ####
-# joint.resid.pcs <- meffil.methylation.pcs(getBeta(gsetcomb_res), probe.range = 40000, full.obj = TRUE)
-# joint.resid.pcs.df <- joint.resid.pcs$x %>%
-#   data.frame() %>%
-#   select(PC1, PC2) %>%
-#   mutate(Sample_Name = rownames(.)) %>%
-#   left_join(colData(gsetcomb_res) %>% data.frame() %>% select(Sample_Name, Sex, dup, Batch, idnum), by = "Sample_Name") %>%
-#   mutate(Batch2 = ifelse(Batch == "Esteller", "Reference", "Alternative")) %>%
-#   as_tibble()
-# 
-# idnum.resid.tab.joint <- joint.resid.pcs.df %>%
-#   filter(dup) %>%
-#   group_by(idnum) %>%
-#   summarize(n = length(unique(Batch))) %>%
-#   mutate(type = ifelse(n == 1, "Replicate same batch", "Replicate different batch")) %>%
-#   data.frame()
-# rownames(idnum.resid.tab.joint) <- idnum.resid.tab.joint$idnum  
-# joint.resid.pcs.df$type <- factor(ifelse(joint.resid.pcs.df$dup, idnum.resid.tab.joint[as.character(joint.resid.pcs.df$idnum), "type"], 
-#                                    joint.resid.pcs.df$Batch2),
-#                             levels = c("Reference", "Alternative", "Replicate same batch", "Replicate different batch"))
-# joint.resid.pcs.vars <- joint.resid.pcs$sdev^2/sum(joint.resid.pcs$sdev^2)
-# joint_resid_pc <- ggplot(joint.resid.pcs.df, aes(x = PC1, y = PC2, color = type)) +
-#   geom_point() +
-#   scale_color_manual(name = "Batch", values = c("blue", "red", "grey", "black")) +
-#   scale_x_continuous(name = paste0("PC1 (", round(joint.resid.pcs.vars[1]*100, 1), "%)")) +
-#   scale_y_continuous(name = paste0("PC2 (", round(joint.resid.pcs.vars[2]*100, 1), "%)")) +
-#   theme_bw() +
-#   ggtitle("Joint Normalization") +
-#   theme(plot.title = element_text(hjust = 0.5))
-# 
-# summary(lm(PC1 ~ Batch, joint.resid.pcs.df))
-# 
-# png("figures/INMA0.resid.PCA_panel.png", width = 600, height = 300)
-# plot_grid(indep_resid_pc, joint_resid_pc, labels = "AUTO", nrow = 1, rel_widths = c(5, 8))
-# dev.off()
-# 
-
-
 ## Prepare data ####
-# comb.resid.df <- Reduce(rbind, res_joint_resid) %>%
-#   mutate(method = rep(names(res_joint_resid), sapply(res_joint_resid, nrow))) %>%
-#   left_join(joint.pcs.df %>% 
-#               select(Sample_Name, type, idnum, Batch) %>% 
-#               mutate(sample = Sample_Name), by = "sample") %>%
-#   mutate(Normalization = "Joint",
-#          method = factor(method, levels = c("quantile", "beta", "manova", "mlm", "isoforest", "mahdistmcd")),
-#          method = recode(method, "isoforest" = "iForest", "mahdistmcd" = "mah-dist"))
-# 
-# comSamps.resid <- intersect(unique(ind.resid.df$sample), unique(comb.resid.df$sample))
-# 
-# all.resid.df <- rbind(ind.resid.df, comb.resid.df) %>%
-#   filter(sample %in% comSamps)
-
 res_batch_list <- list(Joint = gsetcomb_res[, gsetcomb_res$Batch == "Esteller" | gsetcomb_res$dup], 
                    Independent = gset0_res[, gset0_res$Batch == "Esteller" | gset0_res$dup])
 
@@ -1005,58 +751,7 @@ batch.resid.quant <- ind.resid.df %>%
 
 
 
-## Epimutations per replicate ####
-batch.resid.boxplot <- rbind(mutate(batch.resid.quant, QC = "Residuals"), 
-                             mutate(ind.techbatch.df, QC = "Raw")) %>%
-  mutate(rep_quant = ifelse(is.na(rep_quant), 0.5, rep_quant)) %>%
-  group_by(QC, method, idnum, epi_region_id) %>%
-  summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-                              ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", 
-                                     ifelse(grepl("04", unique(Sample_Name)), "Alternative", "Reference")))) %>%
-  mutate(epi_id = paste(idnum, epi_region_id),
-         epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "Reference", "Alternative"))) %>%
-  group_by(QC) %>%
-  count(method, epi_type, idnum) %>% 
-  complete(method, epi_type, idnum, fill = list(n = 0)) %>%
-  group_by(method) %>%
-  mutate(n = pmin(n, mean(n) + 1.5*sd(n))) %>%
-  ggplot(aes(x = QC, y = n, color = epi_type)) +
-  geom_boxplot() +
-  theme_bw() +
-  scale_y_continuous(name = "Total epimutations detected") +
-  scale_x_discrete() +
-  scale_color_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "darkgreen", "blue")) +
-  facet_wrap(. ~ method, scales = "free")
-# +
-#   theme(axis.text.x=element_blank(),
-#         axis.ticks.x=element_blank())
-
-png("figures/INMA0.resid.batch.boxplot.png", width = 800, height = 300)
-batch.resid.boxplot
-dev.off()
-# 
-# batch.resid.quant %>%
-#   group_by(Normalization, method, idnum, epi_region_id) %>%
-#   summarize(epi_type = ifelse(length(unique(Sample_Name)) == 2, "Both replicates", 
-#                               ifelse(any(rep_quant > 0.95 | rep_quant < 0.05) , "One replicate and outlier signal", 
-#                                      ifelse(grepl("04", unique(Sample_Name)), "Alternative", "Reference")))) %>%
-#   mutate(epi_id = paste(idnum, epi_region_id),
-#          epi_type = factor(epi_type, levels = c("Both replicates", "One replicate and outlier signal", "Reference", "Alternative"))) %>%
-#   group_by(Normalization) %>%
-#   count(method, epi_type, idnum) %>% 
-#   complete(method, epi_type, idnum, fill = list(n = 0)) %>%
-#   group_by(Normalization, method, idnum) %>%
-#   mutate(p = n/sum(n)) %>%
-#   filter(!is.na(p)) %>%
-#   group_by(Normalization, method, epi_type) %>%
-#   summarize(mean = median(p)) %>%
-#   spread(epi_type, mean) %>%
-#   ungroup() %>%
-#   mutate(rep = as.vector(.[, 5] + .[, 6])) %>%
-#   data.frame()
-# 
-
-
+## Figure 4B
 batch.resid.epiprop.plot <- rbind(mutate(batch.resid.quant, QC = "Residuals"), 
                              mutate(ind.techbatch.df, QC = "Raw")) %>%
   mutate(rep_quant = ifelse(is.na(rep_quant), 0.5, rep_quant)) %>%
@@ -1072,24 +767,13 @@ batch.resid.epiprop.plot <- rbind(mutate(batch.resid.quant, QC = "Residuals"),
   group_by(idnum, QC, method) %>%
   filter(any(n > 0)) %>%
   mutate(p = n/sum(n)) %>%
-  # summarize(p_epi = p[epi_type == "Both replicates"],
-  #           p_signal = sum(p[epi_type %in% c("Both replicates","One replicate and outlier signal")]),
-  #           Reference = p[epi_type == "Reference"],
-  #           Alternative = p[epi_type == "Alternative"]) %>%
-  # gather(Signal, Proportion, 4:7) %>%
-  # mutate(Signal = ifelse(Signal == "p_epi", "Called in both replicates", 
-  #                        ifelse(Signal == "p_signal", "Called in one, signal in the other", Signal))) %>%
-  ggplot(aes(x = QC, y = p*100, color = epi_type)) +
+   ggplot(aes(x = QC, y = p*100, color = epi_type)) +
   geom_boxplot() +
   theme_bw() +
   facet_grid(~ method) +
   scale_y_continuous(name = "Proportion of epimutations per individual (%)") +
-  scale_color_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "darkgreen", "blue")) +
+  scale_color_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "#F0E68C", "#228B22"))
   
-png("figures/INMA0.resid.batch.signalprop.png", width = 700, height = 400)
-batch.resid.epiprop.plot
-dev.off()
- 
 
 batch.epiprop <- rbind(mutate(batch.resid.quant, QC = "Residuals"), 
                                   mutate(ind.techbatch.df, QC = "Raw")) %>%
@@ -1114,7 +798,7 @@ lapply(unique(batch.epiprop$method), function(x) {
   wilcox.test(p_epi ~ QC, subset(batch.epiprop, method == x), conf.int = TRUE, exact = FALSE)
 })
 
-# ## Epimutations ####
+# ## Epimutations (Sup Figure 10) ####
 batch.resid.epi.plot1 <-  batch.resid.quant %>%
   mutate(rep_quant = ifelse(is.na(rep_quant), 0.5, rep_quant)) %>%
   filter(chromosome != 0 & type == "Replicate different batch") %>%
@@ -1129,7 +813,7 @@ batch.resid.epi.plot1 <-  batch.resid.quant %>%
   geom_tile() +
   theme_bw() +
   facet_grid(idnum ~ ., scales = "free_y", space="free") +
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "darkgreen", "blue")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "#F0E68C", "#228B22")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -1152,7 +836,7 @@ batch.resid.epi.plot2 <-  batch.resid.quant %>%
   geom_tile() +
   theme_bw() +
   facet_grid(idnum ~ ., scales = "free_y", space="free") +
-  scale_fill_manual(name = "Epimutation detection", values = c("darkgoldenrod2", "gray", "darkgreen", "blue")) +
+  scale_fill_manual(name = "Epimutation detection", values = c("darkorchid4", "darkorchid1", "#F0E68C", "#228B22")) +
   scale_y_discrete(name = "Epimutations") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -1160,169 +844,12 @@ batch.resid.epi.plot2 <-  batch.resid.quant %>%
         panel.grid.minor=element_blank(),
         panel.grid.major=element_blank())
 png("figures/INMA0.resid.batch.epi.png", width = 700, height = 600)
-# batch.resid.epi.plot
 plot_grid(batch.resid.epi.plot1, batch.resid.epi.plot2, rel_widths = c(2, 3))
 dev.off()
 
 
 
-# 
-# batch.ind.resid.prop.plot <-  all.res.comb %>% 
-#   filter(chromosome != 0 & type == "Replicate different Batch") %>%
-#   group_by(QC, Normalization, method, idnum, epi_region_id) %>%
-#   mutate(epi_type = ifelse(length(Batch) == 2, "Shared epimutation", Sample_Name),
-#          epi_type = ifelse(epi_type == "Shared epimutation", "Shared epimutation",
-#                            ifelse(grepl("04", epi_type), "Alternative", "Reference")),
-#          epi_type = factor(epi_type, levels = c("Shared epimutation", "Reference", "Alternative"))) %>%
-#   group_by(QC, Normalization, method) %>%
-#   summarize(p = mean(epi_type == "Shared epimutation")) %>%
-#   ggplot(aes(x = method, y = p*100, color = QC, fill = QC)) +
-#   geom_bar(position = "dodge", stat = "identity") +
-#   theme_bw() +
-#   scale_y_continuous(name = "Proportion of shared epimutations", limits = c(0, 100)) +
-#   scale_x_discrete(drop = FALSE) +
-#   scale_fill_discrete(name = "") +
-#   scale_color_discrete(name = "") +
-#   facet_grid(Normalization ~ ., scales = "free")
-# 
-# png("figures/INMA0.resid.batch.overlap.prop.png")
-# batch.ind.resid.prop.plot
-# dev.off()
-# 
-# 
-# batch.ind.resid.prop.boxplot <-  all.res.comb %>% 
-#   filter(chromosome != 0 & type == "Replicate different Batch") %>%
-#   group_by(QC, Normalization, method, idnum, epi_region_id) %>%
-#   summarize(epi_type = ifelse(length(Batch) == 2, "Shared epimutation", Sample_Name)) %>%
-#   mutate(epi_type = ifelse(epi_type == "Shared epimutation", "Shared epimutation",
-#                            ifelse(grepl("04", epi_type), "Alternative", "Reference")),
-#          epi_type = factor(epi_type, levels = c("Shared epimutation", "Reference", "Alternative"))) %>%
-#   group_by(QC, Normalization, method, idnum) %>%
-#   summarize(p = mean(epi_type == "Shared epimutation")) %>%
-#   ggplot(aes(x = method, y = p*100, color = QC)) +
-#   geom_boxplot() +
-#   theme_bw() +
-#   scale_y_continuous(name = "Proportion of shared epimutations", limits = c(0, 100)) +
-#   scale_x_discrete(drop = FALSE) +
-#   scale_fill_discrete(name = "") +
-#   scale_color_discrete(name = "") +
-#   facet_grid(Normalization ~ .)
-# 
-# png("figures/INMA0.resid.batch.overlap.prop.boxplot.png")
-# batch.ind.resid.prop.boxplot
-# dev.off()
-
-png("figures/INMA0.resid.batch.panel.png", width = 1200, height = 500)
-plot_grid(batch.totnum.norm.resid.plot, batch.ind.resid.plot, batch.ind.resid.prop.plot, labels = "AUTO")
-dev.off()
-
-png("figures/INMA0.resid.batch.panel2.png", width = 1200, height = 500)
-plot_grid(batch.totnum.norm.resid.plot, batch.ind.resid.boxplot, batch.ind.resid.prop.boxplot, labels = "AUTO")
-dev.off()
-
-# Panel of technical results ####
+# Panel of technical results (Figure 4) ####
 png("figures/INMA0.tech.panel.png", width = 800, height = 500)
 plot_grid(tech.ind.top.plot, batch.resid.epiprop.plot, ncol = 1, labels = LETTERS[1:2])
 dev.off()
-
-# Random #####
-selbeta <- subset(ind.comb.df, method == "beta" & type == "Replicate same batch" & cpg_n >= 3)
-beta_cpgs <- unique(unlist(strsplit(selbeta$cpg_ids, ",")))
-beta_cpgs <- beta_cpgs[!is.na(beta_cpgs)]
-
-load("INMA0combined.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
-
-cot <- INMA_ind[, INMA_ind$idnum %in% c(423, 636)]
-cot2 <- gset0_res[, gset0_res$idnum %in% c(423, 636)]
-colnames(cot2) <- paste(colnames(cot2), "Resid", sep = "-")
-cor(getBeta(cot[beta_cpgs[!is.na(beta_cpgs)], ]))
-
-png("figures/cot.png", width = 1000, height = 700)
-pheatmap(getBeta(cbind(cot[beta_cpgs, ], cot2[beta_cpgs, ])))
-dev.off()
-
-data.frame(selbeta[, c("Sample_Name", "QC", "epi_region_id", "cpg_ids")]) %>% arrange(Sample_Name)
-getBeta(cbind(cot, cot2)[c("cg16526445","cg05038053","cg24419099"), c(1, 5, 4,8, 2,6, 3,7)])
-
-cpgMeans_raw <- rowMeans(getBeta(INMA_ind))
-correlsglobal_raw <- cor(getBeta(cot) - cpgMeans_raw)
-
-cpgMeans_resid <- rowMeans(getBeta(gset0_res), na.rm = TRUE)
-correlsglobal_resid <- cor(getBeta(cot2) - cpgMeans_resid, use = "complete")
-
-load("INMA0combined.normalizedComBat.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
-pc <- prcomp(getBeta(gset[1:500,]))
-pc <- prcomp(t(meffil:::impute.matrix(getBeta(gset[1:500,]), margin = 1)))
-
-getPCs <- function (normalized.beta, probe.range = 5000, autosomal = T, 
-                    verbose = F) {
-if (is.matrix(normalized.beta)) 
-  sites <- rownames(normalized.beta)
-else {
-  gds.filename <- normalized.beta
-  stopifnot(file.exists(gds.filename))
-  gds.file <- openfn.gds(gds.filename)
-  on.exit(closefn.gds(gds.file))
-  sites <- read.gdsn(index.gdsn(gds.file, "row.names"))
-}
-subset <- sites
-if (autosomal) {
-  featureset <- meffil:::guess.featureset(sites)
-  autosomal.sites <- meffil.get.autosomal.sites(featureset)
-  subset <- intersect(autosomal.sites, subset)
-}
-meffil:::msg("Calculating variances", verbose = verbose)
-if (is.matrix(normalized.beta)) {
-  var.sites <- meffil.most.variable.cpgs(normalized.beta[subset, 
-  ], n = probe.range)
-}
-else {
-  cores <- getOption("mc.cores", 1)
-  cl <- parallel::makeCluster(cores)
-  vars <- clusterApply.gdsn(cl = cl, gds.fn = gds.filename, 
-                            node.name = "matrix", margin = 1, as.is = "double", 
-                            FUN = function(x) var(x, na.rm = T))
-  vars <- vars[match(subset, sites)]
-  var.sites <- subset[order(vars, decreasing = T)[1:probe.range]]
-}
-var.idx <- match(var.sites, sites)
-meffil:::msg("Calculating beta PCs", verbose = verbose)
-if (is.matrix(normalized.beta)) 
-  mat <- normalized.beta[var.idx, ]
-else {
-  matrix.node <- index.gdsn(gds.file, "matrix")
-  mat <- t(sapply(var.idx, function(idx) read.gdsn(matrix.node, 
-                                                   start = c(idx, 1), count = c(1, -1))))
-}
-prcomp(t(meffil:::impute.matrix(mat, margin = 1)))
-}
-pc <- getPCs(getBeta(gset), probe.range = 40000)
-m <- getM(gset)
-
-beta <- meffil:::impute.matrix(getBeta(gset), margin = 1)
-
-ndim <- isva::EstDimRMT(beta, FALSE)$dim + 1
-
-gset.resid10 <- gset
-gset.residNdim <- gset
-gset.residCovars <- gset
-
-res10 <- residuals(lmFit(m, pc$x[, 1:10]), m)
-assay(gset.resid10) <- ilogit2(res10)
-
-resNdim <- residuals(lmFit(m, pc$x[, 1:ndim]), m)
-assay(gset.residNdim) <- ilogit2(resNdim)
-
-library(epimutations)
-load("INMA.commonControlSamples.Rdata")
-par <- epi_parameters()
-par$beta$pvalue_cutoff <- 0.01
-
-beta_resid10 <- epimutations(case_samples = gset.resid10[, gset.resid10$idnum %in% c(423, 636)], 
-                             control_panel = gset.resid10[, samps], method = "beta")
-beta_resid10.all <- epimutations(case_samples = gset.resid10[, gset.resid10$idnum %in% c(423, 636)], 
-                             control_panel = gset.resid10[, samps], method = "beta", epi_params = par)
-beta_residNdim <- epimutations(case_samples = gset.residNdim[, gset.residNdim$idnum %in% c(423, 636)], 
-                             control_panel = gset.residNdim[, samps], method = "beta")
-beta_residNdim.all <- epimutations(case_samples = gset.residNdim[, gset.residNdim$idnum %in% c(423, 636)], 
-                                 control_panel = gset.residNdim[, samps], method = "beta", epi_params = par)
