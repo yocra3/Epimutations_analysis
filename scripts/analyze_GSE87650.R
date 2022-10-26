@@ -38,56 +38,56 @@ methods <- c("beta", "quantile", "mlm")
 names(methods) <- methods
 
 
-res.gse87650.casecontrol.list <- lapply(methods, epimutations, case_samples = case, 
+res.gse87650.casecontrol.list <- lapply(methods, epimutations, case_samples = case,
                             control_panel = control)
 save(res.gse87650.casecontrol.list, file = "results/epimutations/GSE87650.epimutations.cases.residuals.Rdata")
 
-res.gse87650.loo.list <- lapply(methods, epimutations_one_leave_out, methy = gset_filt, 
+res.gse87650.loo.list <- lapply(methods, epimutations_one_leave_out, methy = gset_filt,
                                 BPPARAM = MulticoreParam(2))
 save(res.gse87650.loo.list, file = "results/epimutations/GSE87650.epimutations.loo.residuals.Rdata")
 
 # Process epimutations ####
 plotDisease <- function(set, range){
-  
+
   miniset <- subsetByOverlaps(set, range)
-  
+
   df <- getBeta(miniset)
-  
+
   df <- t(df) %>% data.frame()
   df$id <- colnames(miniset)
-  
+
   df.gath <- gather(df, cpg, methylation, seq_len(nrow(miniset)))
   df.gath$disease <- miniset$disease
   df.gath$disease <- ifelse(df.gath$disease %in% c("HL", "HS"), "Healthy", df.gath$disease)
   df.gath$disease <- factor(df.gath$disease, levels = c("Healthy", "CD", "UC"))
-  
+
   df.gath$Coordinates <- start(rowRanges(miniset)[df.gath$cpg])
-  
-  
+
+
   ggplot(df.gath, aes(x = Coordinates, y = methylation, group = id, col = disease)) +
     geom_point(alpha = 0.5) +
     geom_line(alpha = 0.5) +
     scale_y_continuous(name = "DNA methylation level", limits = c(0, 1)) +
     theme_bw() +
     theme(plot.title = element_text(hjust = 0.5)) +
-    scale_color_manual(name = "Status", 
-                       values = c("grey", "green", "blue")) 
-    
+    scale_color_manual(name = "Status",
+                       values = c("grey", "green", "blue"))
+
 }
 
 ## Case control ####
 ### Preprocess data ####
 res.gse87650.cc.df <-  res.gse87650.casecontrol.list$quantile %>%
-    left_join(colData(gset_filt) %>% 
-                data.frame() %>% 
-                dplyr::select(Sample_Name, disease, age, Sex, smoking) %>% 
+    left_join(colData(gset_filt) %>%
+                data.frame() %>%
+                dplyr::select(Sample_Name, disease, age, Sex, smoking) %>%
                 mutate(sample = Sample_Name))
 
 res.gse87650.cc.sum <- res.gse87650.cc.df %>%
     group_by(sample, disease, age, Sex, smoking) %>%
     summarize(n = sum(start != 0 & cpg_n > 2)) %>%
     mutate(n_cat = ifelse(n == 0, "0",
-                          ifelse(n == 1, "1", 
+                          ifelse(n == 1, "1",
                                  ifelse(n < 6, "2-5",
                                         ifelse(n < 20, "6-20", "20+")))),
            n_cat = factor(n_cat, levels = c("0", "1", "2-5", "6-20", "20+")))
@@ -117,10 +117,10 @@ recur.disease.epi <- res.gse87650.cc.df %>%
   mutate(disease_n = length(unique(sample))) %>%
   filter(chromosome != 0 & cpg_n > 2) %>%
   group_by(disease, epi_region_id, disease_n) %>%
-  summarize(n = length(unique(sample)),
+  dplyr::summarize(n = length(unique(sample)),
             freq = length(unique(sample))/disease_n) %>%
   ungroup() %>%
-  distinct() 
+  distinct()
 arrange(recur.disease.epi, desc(freq))
 
 gse87650.recur.epi <- filter(res.gse87650.cc.df, epi_region_id %in% subset(recur.disease.epi, n >= 3)$epi_region_id) %>%
@@ -135,54 +135,54 @@ gse87650.recur.epi <- filter(res.gse87650.cc.df, epi_region_id %in% subset(recur
   dplyr::select(epi_region_id, samples, chromosome, start, end, size, cpgs, cpg_n)
 
 write.table(gse87650.recur.epi, file = "figures/GSE87650.recurrEpi.txt", quote = FALSE,
-            row.names = FALSE, sep = "\t")  
+            row.names = FALSE, sep = "\t")
 
 candRegsGR <- epimutacions:::get_candRegsGR()
 
-subset(res.gse87650.cc.df, epi_region_id == "chr6_32793355" & cpg_n > 2) %>% 
+subset(res.gse87650.cc.df, epi_region_id == "chr6_32793355" & cpg_n > 2) %>%
   dplyr::select(-starts_with("CRE"), -ends_with("pvalue"), -cpg_ids) %>% data.frame() %>%
   makeGRangesFromDataFrame() %>% GenomicRanges::reduce()
 
 ## Crohn recurrent: cerca NR2F2
 ### Full
-plotDisease(gset_filt, GRanges("chr15:96884949-96890880")) 
+plotDisease(gset_filt, GRanges("chr15:96884949-96890880"))
 
 ### Regions
-plotDisease(gset_filt, GRanges("chr15:96884949-96888024")) 
-plotDisease(gset_filt, GRanges("chr15:96890452-96890880")) 
+plotDisease(gset_filt, GRanges("chr15:96884949-96888024"))
+plotDisease(gset_filt, GRanges("chr15:96890452-96890880"))
 
 ## Crohn recurrent: cerca DLX5
-## Full 
-plotDisease(gset_filt, GRanges("chr7:96650096-96655889")) 
+## Full
+plotDisease(gset_filt, GRanges("chr7:96650096-96655889"))
 
 ## Regions
-plotDisease(gset_filt, GRanges("chr7:96650096-96652115")) 
-plotDisease(gset_filt, GRanges("chr7:96654782-96655889")) 
+plotDisease(gset_filt, GRanges("chr7:96650096-96652115"))
+plotDisease(gset_filt, GRanges("chr7:96654782-96655889"))
 
 ## Crohn recurrent: cerca TFAP2A
 ## Full
-plotDisease(gset_filt, GRanges("chr6:10381196-10385903")) 
+plotDisease(gset_filt, GRanges("chr6:10381196-10385903"))
 
 ## Regions
-plotDisease(gset_filt, GRanges("chr6:10381196-10383147")) 
+plotDisease(gset_filt, GRanges("chr6:10381196-10383147"))
 plotDisease(gset_filt, GRanges("chr6:10385320-10385903"))
 
 
-## Crohn recurrent: chr6_32793355 - in HLA region 
+## Crohn recurrent: chr6_32793355 - in HLA region
 
 
 ## Crohn recurrent: cerca OTX1
-plotDisease(gset_filt, GRanges("chr2:63279495-63286355")) 
+plotDisease(gset_filt, GRanges("chr2:63279495-63286355"))
 
 ## Crohn recurrent: cerca IRX1
-plotDisease(gset_filt, GRanges("chr5:3592464-3592638")) 
+plotDisease(gset_filt, GRanges("chr5:3592464-3592638"))
 plotDisease(gset_filt, GRanges("chr5:3599012-3602413"))
 
 
 plotDisease(gset_filt, candRegsGR["chr1_50879560"])
 
 ## Crohn recurrent: cerca DMRTA2
-plotDisease(gset_filt, GRanges("chr1:50882910-50885352")) 
+plotDisease(gset_filt, GRanges("chr1:50882910-50885352"))
 plotDisease(gset_filt, GRanges("chr1:50886393-50886782"))
 
 
@@ -194,7 +194,7 @@ recur.ibd.epi <- res.gse87650.cc.df %>%
   summarize(n = n(),
             freq = n()/n_total) %>%
   ungroup() %>%
-  distinct() 
+  distinct()
 
 arrange(recur.ibd.epi, desc(freq))
 ## UC has very few recurrent epimutations and we cannot find common epimutations between both
@@ -225,7 +225,7 @@ pcs.resid.plot <- data.frame(pcs_resid$x, disease = gset_filt$epi_disease) %>%
   scale_y_continuous(name = paste0("PC2 (", round(resid.pcs.vars[2]*100, 1), "%)")) +
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none") +
-  scale_color_manual(name = "Disease", 
+  scale_color_manual(name = "Disease",
                      values = c("grey", "green", "darkgreen", "cyan", "blue")) +
   ggtitle("Whole Methylation")
 
@@ -246,7 +246,7 @@ pcs.rec.plot <- data.frame(pcs_rec$x, disease = gset_filt$epi_disease) %>%
   scale_x_continuous(name = paste0("PC1 (", round(rec.pcs.vars[1]*100, 1), "%)")) +
   scale_y_continuous(name = paste0("PC2 (", round(rec.pcs.vars[2]*100, 1), "%)")) +
   theme(plot.title = element_text(hjust = 0.5)) +
-  scale_color_manual(name = "Disease", 
+  scale_color_manual(name = "Disease",
                      values = c("grey", "green", "darkgreen", "cyan", "blue")) +
   ggtitle("CpGs in recurrent epimutations")
 
@@ -260,9 +260,9 @@ col_colors <- list(
               "Epi_CD" = "pink", "Epi_UC" = "brown"),
   Sex = c("F" = "purple", "M" = "lightblue")
 )
-pheatmap(getBeta(gset_filt[rec.cpgs, ]), scale = "none", 
+pheatmap(getBeta(gset_filt[rec.cpgs, ]), scale = "none",
          annotation_col  = data.frame(colData(gset_filt)[, c("epi_disease", "Sex"), drop = FALSE]),
-         annotation_colors =  col_colors, 
+         annotation_colors =  col_colors,
          show_rownames = FALSE, show_colnames = FALSE)
 
 
@@ -276,10 +276,10 @@ getMeanDifference <- function(cpglist, samp, set){
 }
 res.gse87650.cc.reg.df <- subset(res.gse87650.cc.df, chromosome != 0 & cpg_n >= 3)
 
-magnitudes <- mclapply(seq_len(nrow(res.gse87650.cc.reg.df)), 
-                                        function(i) 
+magnitudes <- mclapply(seq_len(nrow(res.gse87650.cc.reg.df)),
+                                        function(i)
                                           getMeanDifference(res.gse87650.cc.reg.df[i, ]$cpg_ids,
-                                                            res.gse87650.cc.reg.df[i, ]$sample, 
+                                                            res.gse87650.cc.reg.df[i, ]$sample,
                                                             gset_filt), mc.cores = 10)
 res.gse87650.cc.reg.df$magnitude <- unlist(magnitudes)
 
@@ -287,13 +287,13 @@ annot <- IlluminaHumanMethylation450kanno.ilmn12.hg19::Other
 
 isTSS <- lapply(res.gse87650.cc.reg.df$cpg_ids, function(x){
   cpgs <- strsplit(x, ",")[[1]]
-  
+
   any(sapply(annot[cpgs, ]$UCSC_RefGene_Group, function(i) grepl("TSS", i)))
 })
 res.gse87650.cc.reg.df$TSS <- unlist(isTSS)
 subset(res.gse87650.cc.reg.df, abs(magnitude) > 0.5 & TSS & !sample %in% recu.inds.cd & !epi_region_id %in% recu.regs.cd) %>%
   dplyr::select(-starts_with("CRE"), -ends_with("pvalue"), -cpg_ids) %>%
-  arrange(sample, epi_region_id) %>% data.frame() 
+  arrange(sample, epi_region_id) %>% data.frame()
 
 
 
@@ -311,7 +311,7 @@ plotDisease(gset_filt, GRanges("chr11:60738971-60739178")) ## CD6
 res.gse87650.cc.tss <- res.gse87650.cc.reg.df[res.gse87650.cc.reg.df$TSS, ]
 genesTSS <- lapply(res.gse87650.cc.tss$cpg_ids, function(x){
   cpgs <- strsplit(x, ",")[[1]]
-  
+
   unique(unlist(strsplit(annot[cpgs, ]$UCSC_RefGene_Name, ";")))
 })
 
@@ -319,7 +319,7 @@ genesTSS <- lapply(res.gse87650.cc.tss$cpg_ids, function(x){
 library(disgenet2r)
 pass <- ""
 disgenet_api_key <- get_disgenet_api_key(
-  email = "carlos.ruiza@upf.edu", 
+  email = "carlos.ruiza@upf.edu",
   password = pass )
 Sys.setenv(DISGENET_API_KEY= disgenet_api_key)
 
@@ -343,7 +343,7 @@ prior.epi1 <- plot_epimutations(filter(res.gse87650.cc.tss, sample == "GSM233747
 
 filter(res.gse87650.cc.tss, TSSgene %in% disease_genes & cpg_n >= 3 & abs(magnitude) > 0.3) %>%
   dplyr::select(-starts_with("CRE"), -ends_with("pvalue"), -cpg_ids) %>%
-  arrange(TSSgene) %>% data.frame() 
+  arrange(TSSgene) %>% data.frame()
 
 prior.epi3 <- plotDisease(gset_filt, GRanges("chr2:182321354-182321489")) +
   ggtitle("ITGA4 TSS") ## ITGA4 - methylation PMID: 25902909
@@ -372,14 +372,14 @@ gse87650.prior.epi <- filter(res.gse87650.cc.tss, TSSgene %in% disease_genes & c
   dplyr::select(epi_region_id, samples, chromosome, start, end, size, cpgs, cpg_n, magnitudes, TSSgene)
 
 write.table(gse87650.prior.epi, file = "figures/GSE87650.prioirizedEpi.txt", quote = FALSE,
-            row.names = FALSE, sep = "\t")  
+            row.names = FALSE, sep = "\t")
 
 ## Leave-one-out ####
 ### Preprocess data ####
 res.gse87650.loo.df <-  res.gse87650.loo.list$quantile %>%
-  left_join(colData(gset_filt) %>% 
-              data.frame() %>% 
-              dplyr::select(Sample_Name, disease, age, Sex, smoking) %>% 
+  left_join(colData(gset_filt) %>%
+              data.frame() %>%
+              dplyr::select(Sample_Name, disease, age, Sex, smoking) %>%
               mutate(sample = Sample_Name)) %>%
   mutate(disease = ifelse(disease %in% c("HL", "HS"), "Healthy", disease),
          disease = factor(disease, levels = c("Healthy", "CD", "UC")))
@@ -388,7 +388,7 @@ res.gse87650.loo.sum <- res.gse87650.loo.df %>%
   group_by(sample, disease, age, Sex, smoking) %>%
   summarize(n = sum(!is.na(cpg_n) & cpg_n >= 3)) %>%
   mutate(n_cat = ifelse(n == 0, "0",
-                        ifelse(n == 1, "1", 
+                        ifelse(n == 1, "1",
                                ifelse(n < 6, "2-5",
                                       ifelse(n < 20, "6-20", "20+")))),
          n_cat = factor(n_cat, levels = c("0", "1", "2-5", "6-20", "20+")))
@@ -428,7 +428,7 @@ res.gse87650.loo.sum %>%
   scale_x_discrete(name = "Smoking") +
   scale_color_discrete(name = "Epimutations per sample") +
   scale_fill_discrete(name = "Epimutations per sample")
-# 
+#
 # res.gse87650.loo.sum %>%
 #   group_by(Sex, disease, n_cat) %>%
 #   summarize(n = n()) %>%
@@ -464,7 +464,7 @@ recur.disease.epi.loo <- res.gse87650.loo.df %>%
   summarize(n = length(unique(sample)),
             freq = length(unique(sample))/disease_n) %>%
   ungroup() %>%
-  distinct() 
+  distinct()
 arrange(recur.disease.epi.loo, desc(freq))
 
 
@@ -475,7 +475,7 @@ arrange(recur.disease.epi.loo, desc(freq))
 #### Crude
 epi_model_crude_risk <- res.gse87650.loo.sum %>%
     mutate(out = ifelse(n > 1, 1, n)) %>%
-  glm(out ~ disease, ., family = "binomial") 
+  glm(out ~ disease, ., family = "binomial")
 summary(epi_model_crude_risk)
 
 #### Adjusted
@@ -614,8 +614,8 @@ all_genes <- unique(all_genes[!is.na(all_genes)])
 getGOdata <- function(gene_vec){
   genesv <- factor(as.numeric(all_genes %in% gene_vec))
   names(genesv) <- all_genes
-  
-  Data <- new("topGOdata", 
+
+  Data <- new("topGOdata",
               description = "GO analysis of TCs",
               ontology = "BP",
               allGenes = genesv,
@@ -625,7 +625,7 @@ getGOdata <- function(gene_vec){
 }
 godata <- lapply(genes_vec, getGOdata)
 gotests <- lapply(godata, runTest, algorithm = "weight01", statistic = "fisher")
-  
+
 finTab <- Map(function(x, y) {
   GenTable(x, w0 = y, orderBy = "w0",
                      topNodes = length(score(y)))
@@ -688,13 +688,13 @@ eqtm <- read_delim("data/eqtm.txt.gz", delim = "\t")
 all_tcs <- subset(eqtm, CpG %in% all_cpgs)$TC
 
 getGOdata_eQTM <- function(cpg_vec){
-  
+
   tcs <- subset(eqtm, CpG %in% cpg_vec)$TC
-  
+
   genesv <- factor(as.numeric(all_tcs %in% tcs))
   names(genesv) <- all_tcs
-  
-  Data <- new("topGOdata", 
+
+  Data <- new("topGOdata",
               description = "GO analysis of TCs",
               ontology = "BP",
               allGenes = genesv,
@@ -746,5 +746,4 @@ finTab_eqtm_df <- cbind(finTab_eqtm_f[[2]][, 1:2], Reduce(cbind, lapply(c(2, 1, 
            (HealthySignificant > 2 & as.numeric(Healthyw0) < 0.01) |
            (UCSignificant > 2 & as.numeric(UCw0) < 0.01))
 write.table(finTab_eqtm_df, file = "figures/GSE87650.loo.GOs.txt", quote = FALSE,
-            row.names = FALSE, sep = "\t")  
-  
+            row.names = FALSE, sep = "\t")
