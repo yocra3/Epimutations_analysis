@@ -448,7 +448,7 @@ prior.epi4 <- plot_epimutations_group(reg4, reg4$sample, gset) + ggtitle("PHACTR
                   xlim(c(min(reg4$start) - 20, max(reg4$end) + 20))
 
 ## Sup Figure 29
-png("figures/GSE83424.priorEpimutations.png", width = 800, height = 600)
+png("figures/GSE83424.priorEpimutations.png", width = 3200, height = 2400, res = 300)
 plot_grid(prior.epi1, prior.epi2, prior.epi3, prior.epi4, ncol = 2, labels = LETTERS[1:4])
 dev.off()
 
@@ -491,7 +491,7 @@ disease.burden <- gse83424.loo.sum %>%
   scale_fill_discrete(name = "Epimutations per sample")
 
 ## Sup Figure 30
-png("figures/GSE83424.diseaseburden.png", width = 500, height = 300)
+png("figures/GSE83424.diseaseburden.png", width = 2000, height = 1200, res = 300)
 disease.burden
 dev.off()
 
