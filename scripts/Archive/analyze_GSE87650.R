@@ -11,9 +11,11 @@ library(BiocParallel)
 library(meffil)
 library(tidyverse)
 library(robustbase)
-library(topGO)
+# library(topGO)
 library(pheatmap)
 library(cowplot)
+library(ExperimentHub)
+library(limma)
 
 load("results/preprocess/GSE87650/GSE87650.wholeblood.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
 
@@ -21,30 +23,48 @@ load("results/preprocess/GSE87650/GSE87650.wholeblood.autosomic.filterAnnotatedP
 gset_filt <- gset[, gset$description == "sample"]
 
 ## Compute residuals of pcs  ####
-beta <- meffil:::impute.matrix(getBeta(gset_filt), margin = 1)
-ndim <- isva::EstDimRMT(beta, FALSE)$dim + 1
-pcs <- meffil.methylation.pcs(getBeta(gset_filt), probe.range = 40000)
-m <- getM(gset_filt)
-res <- residuals(lmFit(m, pcs[, seq_len(ndim)]), m)
-beta <- ilogit2(res)
-assay(gset_filt) <- beta
-save(gset_filt, file = "results/preprocess/GSE87650/GSE87650.wholeblood.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
+# beta <- meffil:::impute.matrix(getBeta(gset_filt), margin = 1)
+# ndim <- isva::EstDimRMT(beta, FALSE)$dim + 1
+pcs <- meffil.methylation.pcs(getBeta(gset_filt), probe.range = 40000, full.obj = TRUE)
+# m <- getM(gset_filt)
+# res <- residuals(lmFit(m, pcs[, seq_len(ndim)]), m)
+# beta <- ilogit2(res)
+# assay(gset_filt) <- beta
+# save(gset_filt, file = "results/preprocess/GSE87650/GSE87650.wholeblood.autosomic.filterAnnotatedProbes.withNA.PCAresiduals.GenomicRatioSet.Rdata")
 
-case <- gset_filt[, !gset_filt$disease %in% c("HS", "HL")]
-control <- gset_filt[, gset_filt$disease %in% c("HS", "HL")]
+gset_filt$PC1 <- pcs$x[, 1]
+gset_filt$PC2 <- pcs$x[, 2]
 
-## Run epimutations ####
-methods <- c("beta", "quantile", "mlm")
-names(methods) <- methods
+top_clust <- gset_filt[, colnames(gset_filt)[pcs$x[, 2] > 0]]
+low_clust <- gset_filt[, colnames(gset_filt)[pcs$x[, 2] < 0]]
 
+pcs_top <- meffil.methylation.pcs(getBeta(top_clust), probe.range = 40000)
+pcs_low <- meffil.methylation.pcs(getBeta(low_clust), probe.range = 40000)
 
-res.gse87650.casecontrol.list <- lapply(methods, epimutations, case_samples = case,
-                            control_panel = control)
-save(res.gse87650.casecontrol.list, file = "results/epimutations/GSE87650.epimutations.cases.residuals.Rdata")
+gse87650.top.cc <- epimutations(top_clust[,! top_clust$disease %in% c("HS", "HL")], top_clust[, top_clust$disease %in% c("HS", "HL")], method = "quantile")
+gse87650.low.cc <- epimutations(low_clust[,! low_clust$disease %in% c("HS", "HL")], low_clust[, low_clust$disease %in% c("HS", "HL")], method = "quantile")
+gse87650.strat.cc <- rbind(gse87650.top.cc, gse87650.low.cc)
+save(gse87650.strat.cc, file = "results/epimutations/GSE87650.epimutations_quantile.cases.stratified.Rdata")
 
-res.gse87650.loo.list <- lapply(methods, epimutations_one_leave_out, methy = gset_filt,
-                                BPPARAM = MulticoreParam(2))
-save(res.gse87650.loo.list, file = "results/epimutations/GSE87650.epimutations.loo.residuals.Rdata")
+#
+# case <- gset_filt[, !gset_filt$disease %in% c("HS", "HL")]
+# control <- gset_filt[, gset_filt$disease %in% c("HS", "HL")]
+#
+# ## Run epimutations ####
+# methods <- c("beta", "quantile", "mlm")
+# names(methods) <- methods
+#
+# gse87650.cc <- epimutations(case, control, method = "quantile")
+# save(gse87650.cc, file = "results/epimutations/GSE87650.epimutations_quantile.cases.residuals.Rdata")
+#
+#
+# res.gse87650.casecontrol.list <- lapply(methods, epimutations, case_samples = case,
+#                             control_panel = control)
+# save(res.gse87650.casecontrol.list, file = "results/epimutations/GSE87650.epimutations.cases.residuals.Rdata")
+#
+# res.gse87650.loo.list <- lapply(methods, epimutations_one_leave_out, methy = gset_filt,
+#                                 BPPARAM = MulticoreParam(2))
+# save(res.gse87650.loo.list, file = "results/epimutations/GSE87650.epimutations.loo.residuals.Rdata")
 
 # Process epimutations ####
 plotDisease <- function(set, range){
@@ -77,7 +97,7 @@ plotDisease <- function(set, range){
 
 ## Case control ####
 ### Preprocess data ####
-res.gse87650.cc.df <-  res.gse87650.casecontrol.list$quantile %>%
+res.gse87650.cc.df <-  gse87650.strat.cc %>%
     left_join(colData(gset_filt) %>%
                 data.frame() %>%
                 dplyr::select(Sample_Name, disease, age, Sex, smoking) %>%
@@ -107,7 +127,7 @@ res.gse87650.cc.sum %>%
   scale_fill_discrete(name = "Epimutations per sample")
 
 extremeids.cc <- subset(res.gse87650.cc.sum, n > 20)$sample
-extremeids.cc.cd <- subset(res.gse87650.cc.sum, n > 20 & disease == "CD")$sample
+extremeids.cc.cd <- subset(res.gse87650.cc.sum, n > 45 & disease == "CD")$sample
 extremeids.cc.uc <- subset(res.gse87650.cc.sum, n > 20 & disease == "UC")$sample
 
 
@@ -208,21 +228,21 @@ table(sapply(recu.inds.cd, function(x) mean(x %in% extremeids.cc.cd)))
 mean(sapply(recu.inds.cd, function(x) mean(x %in% extremeids.cc.cd)) == 1)
 
 gset_filt$disease2 <- ifelse(gset_filt$disease %in% c("HL", "HS"), "Control", gset_filt$disease)
-gset_filt$epi_disease <- ifelse(gset_filt$Sample_Name %in% extremeids.cc.cd, "Epi_CD",
-                                ifelse(gset_filt$Sample_Name %in% extremeids.cc.uc, "Epi_UC", gset_filt$disease2))
-
+gset_filt$epi_disease <- ifelse(gset_filt$Sample_Name %in% extremeids.cc.cd, "CD_Epi",
+                                ifelse(gset_filt$Sample_Name %in% extremeids.cc.uc, "UC_Epi", gset_filt$disease2))
+gset_filt$epi_disease <- factor(gset_filt$epi_disease , levels = c("Control", "CD", "CD_Epi", "UC", "UC_Epi"))
 #### PC whole methylome
-pcs_resid <- meffil.methylation.pcs(getBeta(gset_filt), full.obj = TRUE,
-                                    probe.range = 40000)
-resid.pcs.vars <- pcs_resid$sdev^2/sum(pcs_resid$sdev^2)
+# pcs_resid <- meffil.methylation.pcs(getBeta(gset_filt), full.obj = TRUE,
+#                                     probe.range = 40000)
+pcs.vars <- pcs$sdev^2/sum(pcs$sdev^2)
 
-pcs.resid.plot <- data.frame(pcs_resid$x, disease = gset_filt$epi_disease) %>%
+pcs.resid.plot <- data.frame(pcs$x, disease = gset_filt$epi_disease) %>%
   mutate(Disease = factor(disease, levels = c("Control", "CD", "Epi_CD", "UC", "Epi_UC"))) %>%
   ggplot(aes(x = PC1, y = PC2, color = Disease)) +
   geom_point() +
   theme_bw() +
-  scale_x_continuous(name = paste0("PC1 (", round(resid.pcs.vars[1]*100, 1), "%)")) +
-  scale_y_continuous(name = paste0("PC2 (", round(resid.pcs.vars[2]*100, 1), "%)")) +
+  scale_x_continuous(name = paste0("PC1 (", round(pcs.vars[1]*100, 1), "%)")) +
+  scale_y_continuous(name = paste0("PC2 (", round(pcs.vars[2]*100, 1), "%)")) +
   theme(plot.title = element_text(hjust = 0.5),
         legend.position = "none") +
   scale_color_manual(name = "Disease",
@@ -239,7 +259,7 @@ pcs_rec <- meffil.methylation.pcs(getBeta(gset_filt[rec.cpgs, ]), full.obj = TRU
 rec.pcs.vars <- pcs_rec$sdev^2/sum(pcs_rec$sdev^2)
 
 pcs.rec.plot <- data.frame(pcs_rec$x, disease = gset_filt$epi_disease) %>%
-  mutate(Disease = factor(disease, levels = c("Control", "CD", "Epi_CD", "UC", "Epi_UC"))) %>%
+  mutate(Disease = factor(disease, levels = c("Control", "CD", "CD_Epi", "UC", "UC_Epi"))) %>%
   ggplot(aes(x = PC1, y = PC2, color = Disease)) +
   geom_point() +
   theme_bw() +
@@ -264,6 +284,291 @@ pheatmap(getBeta(gset_filt[rec.cpgs, ]), scale = "none",
          annotation_col  = data.frame(colData(gset_filt)[, c("epi_disease", "Sex"), drop = FALSE]),
          annotation_colors =  col_colors,
          show_rownames = FALSE, show_colnames = FALSE)
+
+
+## Explore association with cell types
+colData(gset_filt)[, c("Bcell", "CD4T", "CD8T",  "Mono", "Neu", "NK", "epi_disease")] %>%
+  as.data.frame() %>%
+  gather(CellType, Proportion, 1:6) %>%
+  ggplot(aes(x = CellType, y = Proportion, color = epi_disease)) +
+  geom_boxplot() +
+  theme_bw()
+
+## Explore differences in methylation
+gset_cdepi <- gset_filt[, gset_filt$epi_disease %in% c("Control", "CD_Epi")]
+gset_cdepi$epi_disease <- droplevels(gset_cdepi$epi_disease )
+model_cdepi <- model.matrix(~ epi_disease + Sex + age  + PC1 + PC2, colData(gset_cdepi) )
+lm_cdepi <- lmFit(getBeta(gset_cdepi), model_cdepi) %>% eBayes()
+res_cdepi <- topTable(lm_cdepi, coef = 2, n= Inf)
+
+cpgs_cdepi <- rownames(subset(res_cdepi, adj.P.Val < 0.05))
+
+gset_cd <- gset_filt[, gset_filt$epi_disease %in% c("Control", "CD")]
+gset_cd$epi_disease <- droplevels(gset_cd$epi_disease )
+model_cd <- model.matrix(~ epi_disease + Sex + age  + PC1 + PC2, colData(gset_cd) )
+lm_cd <- lmFit(getBeta(gset_cd), model_cd) %>% eBayes()
+res_cd <- topTable(lm_cd, coef = 2, n= Inf)
+cpgs_cd <- rownames(subset(res_cd, adj.P.Val < 0.05))
+
+com_cpgs <- intersect(cpgs_cdepi, cpgs_cd)
+plot(res_cd[com_cpgs, "logFC"], res_cdepi[com_cpgs, "logFC"])
+cor(res_cd[com_cpgs, "logFC"], res_cdepi[com_cpgs, "logFC"])
+
+mean(rec.cpgs %in% cpgs_cdepi)
+mean(rec.cpgs %in% cpgs_cd)
+mean(rec.cpgs %in% com_cpgs)
+
+library(FlowSorted.Blood.450k)
+ref_gset <- preprocessFunnorm(FlowSorted.Blood.450k) %>% mapToGenome() %>% dropMethylationLoci()
+ref_gset <- dropLociWithSnps(ref_gset[!seqnames(ref_gset) %in% c("chrX", "chrY"), ])
+ref_gset_cells <- ref_gset[, !ref_gset$CellType %in% c("PBMC")]
+
+
+## Compute epimutations
+ref_epi <- epimutations(ref_gset_cells[, ref_gset_cells$CellType != "WBC"],ref_gset_cells[, ref_gset_cells$CellType == "WBC"], method = "quantile")
+ref_epi.df <-  ref_epi %>%
+    left_join(colData(ref_gset_cells) %>%
+                data.frame() %>%
+                dplyr::select(Sample_Name, CellType, CellTypeLong ) %>%
+                mutate(sample = Sample_Name))
+
+#
+recur.ref_cell.epi <- ref_epi.df  %>%
+  group_by(CellType) %>%
+  filter(chromosome != 0 & cpg_n > 2) %>%
+  group_by(CellType, epi_region_id) %>%
+  dplyr::summarize(n = length(unique(sample))) %>%
+  ungroup() %>%
+  spread(CellType, n, fill = 0)
+
+
+
+
+rec.regions.cd <- subset(recur.disease.epi, disease == "CD" & n >= 3)$epi_region_id
+
+subset(recur.ref_cell.epi, epi_region_id %in% rec.regions.cd & pmax(Bcell, CD4T, CD8T, Eos, Gran, Mono, Neu, NK) > 4)
+
+
+ref_gset_cells$CellType <- relevel(factor(ref_gset_cells$CellType), "WBC")
+
+pc_cells <- meffil.methylation.pcs(getBeta(ref_gset_cells), full.obj = TRUE,
+                                  probe.range = 40000)
+pc_cells$x %>%
+  data.frame() %>%
+  mutate(Cell = ref_gset_cells$CellTypeLong) %>%
+  ggplot(aes(x = PC1, y = PC2, color = Cell)) +
+  geom_point() +
+  theme_bw()
+
+#
+pc_cells_rec <- meffil.methylation.pcs(getBeta(ref_gset_cells[intersect(rownames(ref_gset_cells), rec.cpgs), ]), full.obj = TRUE,
+                                  probe.range = 40000)
+pc_cells_rec$x %>%
+  data.frame() %>%
+  mutate(Cell = ref_gset_cells$CellTypeLong) %>%
+  ggplot(aes(x = PC1, y = PC2, color = Cell)) +
+  geom_point() +
+  theme_bw()
+
+
+
+
+model_ref <- model.matrix(~ CellType, colData(ref_gset_cells) )
+lm_ref <- lmFit(getBeta(ref_gset_cells), model_ref) %>% eBayes()
+res_ref <- topTable(lm_ref, coef = 2:9, n= Inf)
+
+
+res_cdepi_sig <- topTable(lm_cdepi, coef = 2, n= Inf) %>%
+  mutate(CpG = rownames(.)) %>%
+  as_tibble() %>%
+  mutate(padj = p.adjust(P.Value, "bonferroni")) %>%
+  subset(padj < 0.05)
+
+res_ref_rec <- res_ref %>%
+  mutate(padj = p.adjust(P.Value, "bonferroni")) %>%
+  subset(padj < 0.05) %>%
+  mutate(CpG = rownames(.)) %>%
+  as_tibble()
+
+res_ref_cd <- inner_join(res_ref_rec, res_cdepi_sig, by = "CpG") %>%
+  select("CpG", "logFC", starts_with("Cell"))
+cor(res_ref_cd$logFC, res_ref_cd[,3:10])
+
+makeTab <- function(coef){
+  res_ref <- topTable(lm_ref, coef = coef, n= Inf)
+
+  res_ref_rec <- res_ref %>%
+    mutate(padj = p.adjust(P.Value, "bonferroni")) %>%
+    subset(padj < 0.05) %>%
+    mutate(CpG = rownames(.)) %>%
+    as_tibble()
+
+  res_ref_rec
+}
+cellTabs <- lapply(2:9, makeTab)
+names(cellTabs) <- levels(ref_gset_cells$CellType)[-1]
+
+pcs_neu <- meffil.methylation.pcs(getBeta(gset_filt[intersect(rownames(gset_filt), cellTabs$Neu$CpG), ]), full.obj = TRUE,
+                                  probe.range = 40000)
+
+cell_cpgs_plot <- lapply(names(cellTabs), function(cell){
+  pcs_neu <- meffil.methylation.pcs(getBeta(gset_filt[intersect(rownames(gset_filt), cellTabs[[cell]]$CpG), ]), full.obj = TRUE,
+                                    probe.range = 40000)
+  neu.pcs.vars <- pcs_neu$sdev^2/sum(pcs_neu$sdev^2)
+
+  pcs.neu.plot <- data.frame(pcs_neu$x, disease = gset_filt$epi_disease) %>%
+    mutate(Disease = factor(disease, levels = c("Control", "CD", "CD_Epi", "UC", "UC_Epi"))) %>%
+    ggplot(aes(x = PC1, y = PC2, color = Disease)) +
+    geom_point() +
+    theme_bw() +
+    scale_x_continuous(name = paste0("PC1 (", round(neu.pcs.vars[1]*100, 1), "%)")) +
+    scale_y_continuous(name = paste0("PC2 (", round(neu.pcs.vars[2]*100, 1), "%)")) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_color_manual(name = "Disease",
+                       values = c("grey", "green", "darkgreen", "cyan", "blue")) +
+    ggtitle(paste0("Top CpGs in ", cell))
+})
+plot_grid(plotlist = cell_cpgs_plot, ncol = 4, nrow = 2)
+
+
+cell_cors <- sapply(cellTabs, function(x) {
+  comb <- inner_join(x, res_cdepi_sig, by = "CpG")
+  cor(comb$logFC.x, comb$logFC.y)
+})
+
+neu_comb <- inner_join(cellTabs$Neu, res_cdepi_sig, by = "CpG", suffix = c(".Neu", ".CD"))
+
+ggplot(neu_comb, aes(x = logFC.CD, y = logFC.Neu)) +
+  geom_point() +
+  theme_bw()
+
+neu_cpgs <- subset(neu_comb , sign(logFC.Neu ) == sign(logFC.CD))$CpG
+disc_cpgs <- subset(neu_comb , sign(logFC.Neu ) != sign(logFC.CD))$CpG
+
+mean(disc_cpgs %in% rec.cpgs)
+mean(neu_cpgs %in% rec.cpgs)
+
+mean(disc_cpgs %in% cpgs_cd)
+mean(disc_cpgs %in% com_cpgs)
+mean(neu_cpgs %in% cpgs_cd)
+mean(neu_cpgs %in% com_cpgs)
+
+
+eh <- ExperimentHub()
+candRegsGR <- eh[["EH6692"]]
+
+neu_GR <- sort(rowRanges(gset_filt[neu_cpgs,]))
+neu_epi <- candRegsGR[to(findOverlaps(neu_GR,candRegsGR ))]
+neu_epi <- neu_epi[]
+
+
+
+## Region with recurrent epimutation matching pattern of neutrophils
+a <- subset(res_ref_cd, CellTypeNeu < -0.1)
+
+plotRegion <- function(set, range, var){
+
+  miniset <- subsetByOverlaps(set, range)
+
+  df <- getBeta(miniset)
+
+  df <- t(df) %>% data.frame()
+  df$id <- colnames(miniset)
+
+  df.gath <- gather(df, cpg, methylation, seq_len(nrow(miniset)))
+  df.gath$disease <- var
+  df.gath$Coordinates <- start(rowRanges(miniset)[df.gath$cpg])
+
+
+  ggplot(df.gath, aes(x = Coordinates, y = methylation, group = id, col = disease)) +
+    geom_point(alpha = 0.5) +
+    geom_line(alpha = 0.5) +
+    scale_y_continuous(name = "DNA methylation level", limits = c(0, 1)) +
+    theme_bw() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+}
+
+gset_cd <- gset_filt[, gset_filt$disease != "UC"]
+plot_grid(plotRegion(gset_cd, candRegsGR["chr17_79880258"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr17_79880258"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+subset(recur.ref_cell.epi, epi_region_id %in% rec.regions.cd & pmax(Bcell, CD4T, CD8T, Eos, Gran, Mono, Neu, NK) > 4)
+
+## chr1_25253237 -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr1_25253237"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr1_25253237"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr11_67204799 -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr11_67204799"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr11_67204799"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr11_94274867 -> map with neutrophils
+plot_grid(plotRegion(gset_cd, candRegsGR["chr11_94274867"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr11_94274867"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr16_29673465 -> map with CD19+ Bcells
+plot_grid(plotRegion(gset_cd, candRegsGR["chr16_29673465"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr16_29673465"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr21_46340776  -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr21_46340776"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr21_46340776"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr22_24822802   -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr22_24822802"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr22_24822802"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr6_31695027    -> región demasiado grande
+plot_grid(plotRegion(gset_cd, candRegsGR["chr6_31695027"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr6_31695027"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## chr6_32793355   -> región demasiado grande
+plot_grid(plotRegion(gset_cd, candRegsGR["chr6_32793355"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr6_32793355"],ref_gset_cells$CellTypeLong), ncol = 2)
+
+## Download a second
+library(GEOquery)
+geo_ref_cells <- getGEO("GSE88824")
+geo_ref_cells_gset <- makeGenomicRatioSetFromMatrix(exprs(geo_ref_cells[[1]]), pData = pData(geo_ref_cells[[1]]))
+
+geo_ref_cells_gset <- dropLociWithSnps(geo_ref_cells_gset[!seqnames(geo_ref_cells_gset) %in% c("chrX", "chrY"), ]) %>% dropMethylationLoci()
+geo_ref_cells_gset$CellType <- geo_ref_cells_gset$`cell type:ch1`
+geo_cells_filt <- geo_ref_cells_gset[, geo_ref_cells_gset$`disease state:ch1` == "Control"]
+
+pc_geo <- meffil.methylation.pcs(getBeta(geo_cells_filt), probe.range = 40000, full.obj = TRUE)
+pc_geo$x %>%
+  data.frame() %>%
+  mutate(Cell = geo_cells_filt$CellType) %>%
+  ggplot(aes(x = PC1, y = PC2, color = Cell)) +
+  geom_point() +
+  theme_bw()
+
+
+
+
+## Compute epimutations
+cell_epi <- epimutations(geo_cells_filt[, !geo_cells_filt$CellType %in% c("WBC", "WholeBlood")],geo_cells_filt[, geo_cells_filt$CellType %in% c("WBC", "WholeBlood")], method = "quantile")
+cell_epi.df <-  cell_epi %>%
+    left_join(colData(geo_cells_filt) %>%
+                data.frame() %>%
+                dplyr::select(geo_accession , CellType ) %>%
+                mutate(sample = geo_accession ))
+
+#
+recur.cell_epi.epi <- cell_epi.df  %>%
+  group_by(CellType) %>%
+  filter(chromosome != 0 & cpg_n > 2) %>%
+  group_by(CellType, epi_region_id) %>%
+  dplyr::summarize(n = length(unique(sample))) %>%
+  ungroup() %>%
+  spread(CellType, n, fill = 0)
+
+subset(recur.cell_epi.epi, epi_region_id %in% rec.regions.cd & pmax(CD19B, CD4T, CD8T, Monocyte, Neutrophil, NKcell) > 5)
+
+
+## chr1_25253237 -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr1_25253237"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr1_25253237"],ref_gset_cells$CellType), ncol = 2)
+
+## chr11_67204799 -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr11_67204799"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr11_67204799"],ref_gset_cells$CellType), ncol = 2)
+
+## chr11_94274867 -> map with neutrophils
+plot_grid(plotRegion(gset_cd, candRegsGR["chr11_94274867"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr11_94274867"],ref_gset_cells$CellType), ncol = 2)
+
+## chr21_46340776  -> No equivalence
+plot_grid(plotRegion(gset_cd, candRegsGR["chr21_46340776"],gset_cd$epi_disease), plotRegion(ref_gset_cells, candRegsGR["chr21_46340776"],ref_gset_cells$CellType), ncol = 2)
 
 
 ### Explore individual epimutations ####
