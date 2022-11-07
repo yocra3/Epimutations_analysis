@@ -262,7 +262,7 @@ rep.plot <- res.gse87650.cell.loo.rep %>%
   scale_fill_manual(name = "", values = c("pink", "darkolivegreen", "turquoise4", "brown", "grey80", "grey50", "grey20"))
 
 ## Figure 7
-png("figures/GSE87650.replicateEpis.cells.png", width = 600, height = 350)
+png("figures/GSE87650.replicateEpis.cells.png", width = 2400, height = 1400, res = 300)
 rep.plot
 dev.off()
 
@@ -321,7 +321,7 @@ plot_grid(plotlist = ex1, ncol = 2 )
 ex2 <- plotCase("chr20_62886664 8975", res.gse87650.cell.loo.filt, "Samp_8975")
 
 ## Sup Figure 25
-png("figures/GSE87650.replicateEpicell.png", width = 1000, height = 500)
+png("figures/GSE87650.replicateEpicell.png", width = 4000, height = 2000, res = 300)
 plot_grid(plotlist = ex2[c(3, 1, 2, 4)], ncol = 2 )
 dev.off()
 
@@ -346,7 +346,7 @@ subset(res.gse87650.cell.loo.rep, sigDatasets2  == "-CD8--") %>%
 ex5 <- plotCase("chr11_59823993 9034", res.gse87650.cell.loo.filt, "Samp_9034")
 
 ## Sup Figure 26
-png("figures/GSE87650.Epicell_specific.png", width = 1000, height = 500)
+png("figures/GSE87650.Epicell_specific.png", width = 4000, height = 2000, res = 300)
 plot_grid(plotlist = ex5[c(3, 1, 2, 4)], ncol = 2 )
 dev.off()
 
@@ -609,7 +609,7 @@ gse87650.gexp.outliers.plot <- res.gse87650.cell.loo.out.sum %>%
   scale_fill_discrete(name = "")
 
 ## Sup Figure 27
-png("figures/GSE87650.genexp.outliers.png", height = 300)
+png("figures/GSE87650.genexp.outliers.png", height = 1200, width = 1920, res = 300)
 gse87650.gexp.outliers.plot
 dev.off()
 
@@ -650,6 +650,6 @@ gse87650.gexp.plots <- res.gse87650.cell.loo.gexp.sum %>%
   scale_x_discrete(name = "Gene mapping")
 
 ## Sup Figure 28
-png("figures/GSE87650.genexp.scores.png", width = 700)
+png("figures/GSE87650.genexp.scores.png", height = 1920, width = 2800, res = 300)
 gse87650.gexp.plots
 dev.off()

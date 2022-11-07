@@ -125,7 +125,7 @@ joint_pc <- joint.pcs.df %>%
 summary(lm(PC1 ~ Batch, joint.pcs.df))
 
 ## Sup Figure 8
-png("figures/INMA0.PCA_panel.png", width = 600, height = 300)
+png("figures/INMA0.PCA_panel.png", width = 2400, height = 1200, res = 300)
 plot_grid(indep_pc, joint_pc, labels = "AUTO", nrow = 1, rel_widths = c(5, 8))
 dev.off()
 
@@ -210,7 +210,7 @@ group_by(method, idnum, epi_region_id) %>%
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank()) 
 
-png("figures/INMA0.techRep.ind.epi.png", height = 200, width = 400)
+png("figures/INMA0.techRep.ind.epi.png", height = 800, width = 1600, res = 300)
 tech.rep.epi.plot
 dev.off()
 
@@ -280,7 +280,7 @@ tech.norm.plot <- norm.res.out %>%
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 
-png("figures/INMA0.techRep.Norm.png", width = 700, height = 250)
+png("figures/INMA0.techRep.Norm.png", width = 2800, height = 1000, res = 300)
 tech.norm.plot
 dev.off()
 
@@ -303,7 +303,7 @@ tech.num.norm.epi.plot <- norm.res.out %>%
         axis.text.x = element_text(angle=90, vjust=0.5))
   
 
-png("figures/INMA0.techRep.Norm.epi.png", width = 600, height = 350)
+png("figures/INMA0.techRep.Norm.epi.png", width = 2400, height = 1400, res = 300)
 tech.num.norm.epi.plot
 dev.off()
 
@@ -377,7 +377,7 @@ tech.samesamp.norm.outlier.plot <- tech.samesamp.norm.quant %>%
   theme(plot.title = element_text(hjust = 0.5))
 
 
-png("figures/INMA0.sameSamp.Norm.propOverlap.panel.png", width = 800, height = 300)
+png("figures/INMA0.sameSamp.Norm.propOverlap.panel.png", width = 3300, height = 1200, res = 300)
 plot_grid(tech.samesamp.norm.plot,tech.samesamp.norm.outlier.plot, ncol = 2,
           labels = c("A", "B")) 
 dev.off()
@@ -460,7 +460,7 @@ tech.samesamp.norm.epi.plot2 <- tech.samesamp.norm.quant %>%
         panel.grid.major=element_blank())
 
 
-png("figures/INMA0.sameSamp.Norm.epi.png", height = 800, width = 700)
+png("figures/INMA0.sameSamp.Norm.epi.png", height = 3200, width = 2800, res = 300)
 plot_grid(tech.samesamp.norm.epi.plot1, tech.samesamp.norm.epi.plot2, ncol = 2, rel_widths = c(3, 4))
 dev.off()
 
@@ -526,7 +526,7 @@ tech.resid.epi.plot <- tech.resid.quant %>%
         axis.text.x = element_text(angle=90, vjust=0.5))
 
 
-png("figures/INMA0.techRep.resid.epi.png", width = 500, height = 300)
+png("figures/INMA0.techRep.resid.epi.png", width = 2000, height = 1200, res = 300)
 tech.resid.epi.plot
 dev.off()
 
@@ -588,7 +588,7 @@ tech.norm.resid.epi <- rbind(mutate(norm.res.out, QC = "Raw"),
         panel.grid.major=element_blank())
 
 ## Sup Figure 13
-png("figures/INMA0.resid.techRep.Norm.epi.png", width = 700, height = 500)
+png("figures/INMA0.resid.techRep.Norm.epi.png", width = 2800, height = 2000, res = 300)
 tech.norm.resid.epi
 dev.off()
 
@@ -656,13 +656,13 @@ tech.samesamp.norm.resid.outlier.plot <- tech.samesamp.norm.resid.quant %>%
   theme(plot.title = element_text(hjust = 0.5))
 
 ##  Sup Figure 11
-png("figures/INMA0.resid.sameSamp.Norm.propOverlap.panel.png", width = 800, height = 300)
+png("figures/INMA0.resid.sameSamp.Norm.propOverlap.panel.png", width = 3300, height = 1200, res = 300)
 plot_grid(tech.samesamp.norm.resid.plot,tech.samesamp.norm.resid.outlier.plot, ncol = 2,
           labels = c("A", "B")) 
 dev.off()
 
 
-## Epimutations plot (Sup Figure 4) ####
+## Epimutations plot ####
 tech.samesamp.resid.norm.epi.plot <- rbind(mutate(tech.samesamp.norm.resid.quant, QC = "Residuals"),
                                            mutate(tech.samesamp.norm.quant, QC = "Raw")) %>%
   mutate(rep_norm = pmin(rep_quant2, 1 - rep_quant2)) %>%
@@ -683,7 +683,7 @@ tech.samesamp.resid.norm.epi.plot <- rbind(mutate(tech.samesamp.norm.resid.quant
         panel.grid.major=element_blank())
 
 
-png("figures/INMA0.resid.sameSamp.Norm.epi.png", width = 1000, height = 700)
+png("figures/INMA0.resid.sameSamp.Norm.epi.png", width = 4000, height = 2800, res = 300)
 tech.samesamp.resid.norm.epi.plot
 dev.off()
 
@@ -736,7 +736,7 @@ summary(lm(PC1 ~ Batch, ind.resid.pcs.df))
 summary(lm(PC2 ~ Batch, ind.resid.pcs.df))
 
 ## Sup Figure 8
-png("figures/INMA0.indepNorm.resid.PCA.png", height = 300, width = 400)
+png("figures/INMA0.indepNorm.resid.PCA.png", height = 1200, width = 1600, res = 300)
 indep_resid_pc
 dev.off()
 
@@ -843,13 +843,14 @@ batch.resid.epi.plot2 <-  batch.resid.quant %>%
         axis.text.x = element_text(angle=90, vjust=0.5),
         panel.grid.minor=element_blank(),
         panel.grid.major=element_blank())
-png("figures/INMA0.resid.batch.epi.png", width = 700, height = 600)
+
+png("figures/INMA0.resid.batch.epi.png", width = 2800, height = 2400, res = 300)
 plot_grid(batch.resid.epi.plot1, batch.resid.epi.plot2, rel_widths = c(2, 3))
 dev.off()
 
 
 
 # Panel of technical results (Figure 4) ####
-png("figures/INMA0.tech.panel.png", width = 800, height = 500)
-plot_grid(tech.ind.top.plot, batch.resid.epiprop.plot, ncol = 1, labels = LETTERS[1:2])
+png("figures/INMA0.tech.panel.png", width = 4000, height = 2700, res = 300)
+plot_grid(tech.ind.top.plot + theme(plot.margin = margin(7, 20, 7, 7)), batch.resid.epiprop.plot + theme(plot.margin = margin(7, 20, 7, 7)), ncol = 1, labels = LETTERS[1:2])
 dev.off()

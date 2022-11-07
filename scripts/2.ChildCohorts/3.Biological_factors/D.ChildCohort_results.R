@@ -105,7 +105,7 @@ res.inma4.df$smoking <- ifelse(colData(inma4)[res.inma4.df$sample, "msmk"] == "n
 inma4.sum.df <- make_sum_df(res.inma4.df)
 
 ## Add smoking data
-helix_smk <- read.table("~/data/WS_HELIX/HELIX_analyses/PGRS_smok_GF/db/HELIX_smok.txt", header = TRUE)
+helix_smk <- read.table("../PGRS_smok_GF/db/HELIX_smok.txt", header = TRUE)
 helix_smk <- helix_smk[!duplicated(helix_smk$HelixID), ]
 helix_smk <- subset(helix_smk, HelixID %in% helix$HelixID)
 helix_map <- colData(helix)[, c("HelixID", "SampleID")]
@@ -249,7 +249,7 @@ epi.burden.plot <- all.sum.df %>%
   
 
 ## Figure 5
-png("figures/allINMA.epiburden.png", height = 300, width = 900)
+png("figures/allINMA.epiburden.png", height = 1200, width = 3600, res = 300)
 epi.burden.plot
 dev.off()
 
@@ -283,7 +283,7 @@ all.magnitude.plot <- all.res.df %>%
   scale_x_continuous("Epimutations magnitude")
 
 ## Sup Figure 19
-png("figures/allINMA.magnitude.png", height = 200)
+png("figures/allINMA.magnitude.png", height = 800, width = 2000, res = 300)
 all.magnitude.plot
 dev.off()
 
@@ -367,7 +367,7 @@ recur.epi.freq.shared.plot <- recur.epi.comb %>%
   scale_y_continuous(name = "Epimutations in literature (%)", limits = c(0, 100))
 
 ## Sup Figure 20
-png("figures/allINMA.epi.freq.shared.png", height = 300)
+png("figures/allINMA.epi.freq.shared.png", height = 1200, width = 2000, res = 300)
 recur.epi.freq.shared.plot
 dev.off()
 
@@ -385,7 +385,7 @@ recur.epi.freq.cor.plot <- recur.epi.comb %>%
                 breaks = c(0.1, 0.2, 0.5, 1, 2, 5))
 
 
-png("figures/allINMA.epi.freq.cor.png")
+png("figures/allINMA.epi.freq.cor.png", height = 2000, width = 2000, res = 300)
 recur.epi.freq.cor.plot
 dev.off()
 
@@ -539,7 +539,7 @@ sex.burden.plot <- all.sum.df %>%
   scale_color_discrete(name = "Epimutations per sample") +
   scale_fill_discrete(name = "Epimutations per sample")
 
-png("figures/allINMA.burden.sex.png")
+png("figures/allINMA.burden.sex.png", height = 1800, width = 2000, res = 300)
 sex.burden.plot
 dev.off()
 
@@ -726,7 +726,7 @@ rec.sex.quant.plot <- plotRecurrentReg(candRegsGR["chr1_75590483"])
 rec.sex.beta.plot <- plotRecurrentReg(candRegsGR["chr6_150346497"])
 
 ## Sup Figure 17
-png("figures/INMA.sex.rec.epis.png", width = 1200)
+png("figures/INMA.sex.rec.epis.png", width = 4800, height = 2000, res = 300)
 plot_grid(rec.sex.quant.plot, rec.sex.beta.plot, ncol = 1, labels = c("A", "B"))
 dev.off()
 
@@ -801,7 +801,7 @@ batch.burden.plot <- inma0.sum.df %>%
   scale_color_discrete(name = "Epimutations per sample") +
   scale_fill_discrete(name = "Epimutations per sample")
 
-png("figures/INMA0.burden.batch.png", height = 250, width = 500)
+png("figures/INMA0.burden.batch.png", height = 1000, width = 2300, res = 300)
 batch.burden.plot
 dev.off()
 
@@ -836,7 +836,7 @@ cohort.burden.plot <- helix.sum.df %>%
   scale_color_discrete(name = "Epimutations per sample") +
   scale_fill_discrete(name = "Epimutations per sample")
 
-png("figures/HELIX.burden.cohort.png", width = 800, height = 300)
+png("figures/HELIX.burden.cohort.png", width = 3500, height = 1200, res = 300)
 cohort.burden.plot
 dev.off()
 
@@ -941,7 +941,7 @@ smk.burden.plot <- all.sum.df %>%
 
 
 
-png("figures/allINMA.burden.smoking.png")
+png("figures/allINMA.burden.smoking.png", height = 2000, width = 2000, res = 300)
 smk.burden.plot
 dev.off()
 
@@ -1088,7 +1088,8 @@ sab.replic.strict.plot <- sab.rep.res2 %>%
   group_by(method, sigDatasets)  %>%
   filter(method %in% methods) %>%
   summarize(n = n()) %>%
-  complete(method, n, fill = list(n = 0)) %>%
+  # ungroup() %>%
+  # complete(method, sigDatasets, fill = list(n = 0)) %>%
   mutate(p = n/sum(n), 
          method = factor(method, levels = c("quantile", "beta", "mlm")),
          category = dplyr::recode(sigDatasets, "--8 years" = "8 years",
@@ -1115,7 +1116,8 @@ sab.replic.signal.plot <- sab.rep.res2 %>%
   group_by(method, sigDatasets2)  %>%
   filter(method %in% methods) %>%
   summarize(n = n()) %>%
-  complete(method, n, fill = list(n = 0)) %>%
+  # ungroup() %>%
+  # complete(method, sigDatasets2, fill = list(n = 0)) %>%
   mutate(p = n/sum(n), 
          method = factor(method, levels = c("quantile", "beta", "mlm")),
          category = dplyr::recode(sigDatasets2, "--8 years" = "8 years",
@@ -1139,7 +1141,7 @@ sab.replic.signal.plot <- sab.rep.res2 %>%
         legend.position = "right")
 
 ## Sup Figure 22
-png("figures/INMAsab.replic.png", width = 975, height = 400)
+png("figures/INMAsab.replic.png", width = 4000, height = 1600, res = 300)
 plot_grid(sab.replic.strict.plot, sab.replic.signal.plot, nrow = 1, 
           rel_widths = c(2, 3))
 dev.off()
@@ -1393,7 +1395,7 @@ res.inma4.filt.sumdf  <- res.inma4.filt %>%
          measure = factor(measure, levels = c("z", "rank")), 
          method = factor(method, levels = c("quantile", "beta", "mlm")))
 
-## Sup Figure 24
+## Sup Figure 23
 inma4.gexp.plot <- res.inma4.filt.sumdf %>% 
   ggplot(aes(x = exp_type, y = value, color = method)) +
   geom_violin() +
@@ -1403,7 +1405,7 @@ inma4.gexp.plot <- res.inma4.filt.sumdf %>%
   facet_grid(measure ~ method, scales = "free") +
   scale_x_discrete(name = "Gene mapping")
 
-png("figures/INMA4.genexp.png")
+png("figures/INMA4.genexp.png", width = 2000, height = 2000, res = 300)
 inma4.gexp.plot
 dev.off()
 
@@ -1501,7 +1503,7 @@ helix.gexp.plot <- res.helix.filt.sumdf %>%
   facet_grid(measure ~ method, scales = "free")  +
   scale_x_discrete(name = "Gene mapping")
 
-png("figures/HELIX.genexp.png")
+png("figures/HELIX.genexp.png", height = 2000, width = 2000, res = 300)
 helix.gexp.plot
 dev.off()
 
@@ -1530,7 +1532,7 @@ all.prop.gexp.plot <- res.comb.filt.sumdf %>%
   scale_y_continuous("Epimutaitons with outlier expression (%)", limits = c(0, 50)) +
   scale_x_discrete(name = "Gene mapping")
 
-png("figures/allINMA.genexp.prop.png", height = 350)
+png("figures/allINMA.genexp.prop.png", height = 1400, width = 2000, res = 300)
 all.prop.gexp.plot
 dev.off()
 
