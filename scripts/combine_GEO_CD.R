@@ -126,7 +126,10 @@ plotComb(candRegsGR["chr1_68514311"]) ## no clara
 plotComb(GRanges("chr1:68515788-68517454")) ## no clara
 
 plotComb(candRegsGR["chr5_126625777"]) ## 
+png("figures/Crohn_control_epimutation.png")
 plotComb(GRanges("chr5:126625742-126626298")) ## Presente en 1 control / MEGF10 gene asociado a Crohn en un GWAS
+dev.off()
+
 
 plotComb(candRegsGR["chr6_33279563"]) ## HLA
 
