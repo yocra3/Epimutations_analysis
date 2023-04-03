@@ -170,39 +170,29 @@ dev.off()
 ## Simulate data a general dataset with only unique epimutations and subset ####
 set.seed(27)
 Nsamp <- seq(20, 90, 10)
-Nsim <- 10
 sim_sample_res <- lapply(Nsamp, function(N){
   
-  lapply(seq_len(Nsim), function(i){
-    message("Iteration", i)
-    samps <- sample(colnames(mcols(sim.data040_samp)), N)
-    epimut_samp <- lapply(names(epi_parameters()), function(met){
-      epimutations_one_leave_out(simGset040_samp[, samps], method = met)
-    })
-    names(epimut_samp) <- names(epi_parameters())
-    
-    epimut_sampGR <- lapply(epimut_samp, function(x) {
-      GR <- makeGRangesFromDataFrame(x, keep.extra.columns = TRUE)
-      GR[seqnames(GR) != 0]
-    })
-    
-    ramr_samp <- lapply(c("IQR", "beta", "wbeta"), function(met){
-      subsamp <- sim.data040_samp
-      mcols(subsamp) <- mcols(sim.data040_samp)[, samps]
-      getAMR(subsamp, ramr.method = met, min.cpgs = 3,
-             merge.window = 1000, cores = 2, qval.cutoff = 1e-6)
-    })
-    
-    ramr_samp_def <- lapply(c("IQR", "beta", "wbeta"), function(met){
-      subsamp <- sim.data040_samp
-      mcols(subsamp) <- mcols(sim.data040_samp)[, samps]
-      getAMR(subsamp, ramr.method = met, min.cpgs = 3,
-             merge.window = 1000, cores = 2, qval.cutoff = 1e-3)
-    })
-    names(ramr_samp_def) <- paste(c("IQR", "rmar-beta", "wbeta"), "def")
-    
-    list(samples = samps, results = c(epimut_sampGR, ramr_samp, ramr_samp_def))
+  samps <- sample(colnames(mcols(sim.data040)), N)
+  epimut_samp <- lapply(names(epi_parameters()), function(met){
+    epimutations_one_leave_out(simGset040[, samps], method = met)
   })
+  names(epimut_samp) <- names(epi_parameters())
+  
+  epimut_sampGR <- lapply(epimut_samp, function(x) {
+    GR <- makeGRangesFromDataFrame(x, keep.extra.columns = TRUE)
+    GR[seqnames(GR) != 0]
+  })
+  
+  
+  ramr_samp <- lapply(c("IQR", "beta", "wbeta"), function(met){
+    subsamp <- sim.data040[, samps]
+    getAMR(subsamp, ramr.method = met, min.cpgs = 3,
+           merge.window = 1000, cores = 2, qval.cutoff = 1e-3)
+  })
+  names(ramr_samp) <- c("IQR", "rmar-beta", "wbeta")
+  
+  list(samples = samps, results = c(epimut_sampGR, ramr_samp))
+  
 })
 save(sim_sample_res, file = "results/simulations/sim_res_samplesize.Rdata")
 
@@ -388,14 +378,95 @@ plot_nonunique
 dev.off()
 
 # Time ####
-### Create new simulations with only unique epimutations in 10 samples
-amrs.time <- subset(amrs.unique_040, sample %in% paste0("sample", 1:10))
-
-## Simulate data ####
+### Create reference without epimutations
 set.seed(27)
-sim.data_time <-
-  simulateData(data.ranges, nsamples = 100,
-               amr.ranges = c(amrs.time, noise_040), cores = 2)
-save(sim.data_time, amrs.time, file = "results/simulations/sim.time_ramr_format.Rdata")
+sim.data_control <-
+  simulateData(sim.data040, nsamples = 100,
+               amr.ranges = noise_040, cores = 2)
+save(sim.data_control, file = "results/simulations/sim.reference_ramr_format.Rdata")
 
+sim.data_ctrlGRS <- makeGenomicRatioSetFromMatrix(data.matrix(mcols(sim.data_control)))
+
+## Compute time ####
+install.packages("microbenchmark")
+library(microbenchmark)
+
+
+ramr_tests <- lapply(c("IQR", "beta", "wbeta"), function(x) {
+  bquote( getAMR(sim.data040, ramr.method = .(x), min.cpgs = 3,
+                 qval.cutoff = 1e-3,
+                 merge.window = 1000, cores = 1))
+})
+names(ramr_tests) <- paste0("ramr-", c("IQR", "beta", "wbeta"))
+
+cc_tests <- lapply(names(epi_parameters()), function(met){
+  bquote(epimutations(simGset040, sim.data_ctrlGRS, method = .(met)))
+})
+names(cc_tests) <- paste("cc", names(epi_parameters()))
+
+loo_tests <- lapply(names(epi_parameters()), function(met){
+  bquote(epimutations_one_leave_out(simGset040, method = .(met)))
+})
+names(loo_tests) <- paste("loo", names(epi_parameters()))
+
+
+time_report <- microbenchmark(
+  list = c(cc_tests, loo_tests, ramr_tests), times = 5)
+save(time_report, file = "results/simulations/sim_res_time.Rdata")
+
+plot_time <- data.frame(time_report) %>%
+  mutate(Method = recode(expr, IQR = "ramr-IQR" , beta = "ramr-beta", wbeta = "ramr-wbeta"), 
+         Package = ifelse(grepl("ramr", Method), "ramr", "epimutacions"),
+         Mode = ifelse(grepl("cc", Method), "Case-Control", "LOO"),
+         Method = gsub("cc ", "", Method),
+         Method = gsub("loo ", "", Method),
+         Method = factor(Method, levels = c("quantile", "beta", "manova", "mlm", "iForest", "mahdist", "ramr-IQR", "ramr-beta", "ramr-wbeta"))) %>%
+  ggplot(aes(x = Method, y = time*10^-9, fill = Method)) +
+  geom_boxplot() +
+  ylab("Time (s)") +
+  scale_fill_manual(values = c("#E69F00", "#F0E442","cyan", "deepskyblue2", "deepskyblue4", "blue", "grey10", "grey50", "grey90")) +
+  facet_grid(~ Package + Mode, scales = "free_x", space = "free_x") +
+  theme_bw() +
+  theme(axis.text.x  = element_text(angle = 90, vjust = 0.5))
+
+
+png("figures/simulations_time.png", res = 300, width = 2500, height = 1000)
+plot_time 
+dev.off()
+
+# Memory profiling ####
+install.packages("bench")
+library(bench)
+
+# ramr_testsmem <- lapply(c("IQR", "beta", "wbeta"), function(x) {
+#   bquote( getAMR(sim.data040[, 1:10], ramr.method = .(x), min.cpgs = 3,
+#                  qval.cutoff = 1e-3,
+#                  merge.window = 1000, cores = 1))
+# })
+# names(ramr_testsmem) <- paste0("ramr-", c("IQR", "beta", "wbeta"))
+# 
+# cc_testsmem <- lapply(names(epi_parameters()), function(met){
+#   bquote(epimutations(simGset040[, 1:10], sim.data_ctrlGRS[, 1:10], method = .(met)))
+# })
+# names(cc_testsmem) <- paste("cc", names(epi_parameters()))
+# 
+# loo_testsmem <- lapply(names(epi_parameters()), function(met){
+#   bquote(epimutations_one_leave_out(simGset040[, 1:10], method = .(met)))
+# })
+# names(loo_testsmem) <- paste("loo", names(epi_parameters()))
+
+
+mem_ramr <- mark(exprs = c(ramr_tests, cc_tests, loo_tests), 
+                 iterations = 1, check = FALSE, filter_gc = FALSE)
+save(mem_ramr, file = "results/simulations/sim_res_mem_ramr.Rdata")
+
+mem_cc <- mark(exprs = cc_tests, 
+                 iterations = 1, check = FALSE, filter_gc = FALSE)
+save(mem_cc, file = "results/simulations/sim_res_mem_cc.Rdata")
+
+mem_loo <- mark(exprs = loo_tests, 
+                 iterations = 1, check = FALSE, filter_gc = FALSE)
+save(mem_loo, file = "results/simulations/sim_res_mem_loo.Rdata")
+
+ 
 
