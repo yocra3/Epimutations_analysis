@@ -3,7 +3,7 @@
 #'#################################################################################
 #' Run methylation QC data with minfi
 #' This script performs different normalization algorithms included in minfi
-#' This QC is based on a previous QC performed with minfi. Therefore, the same 
+#' This QC is based on a previous QC performed with meffil. Therefore, the same 
 #' probes and samples will be removed.
 #'#################################################################################
 #'#################################################################################

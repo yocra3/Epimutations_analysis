@@ -217,6 +217,9 @@ dev.off()
 # Diff. norm. - tech rep. ####
 ## Prepare data ####
 load("results/epimutations/Esteller.epimutations.normalization.Rdata")
+load("results/epimutations/Esteller.epimutations.normalizationBMIQ.Rdata")
+
+INMA_norm$BMIQ <- lapply(INMA_norm_BMIQ, function(x) x[, colnames(x) != "delta_beta"])
 norm.res.df <- Reduce(rbind, 
                       lapply(INMA_norm, function(x) {Reduce(rbind, x) %>%
                                       mutate(method = rep(names(x), sapply(x, nrow)))}
@@ -236,7 +239,7 @@ norm.res.df <- rbind(norm.res.df,
    mutate(ind.res.df, Normalization = "Func-meffil") %>% filter(sample %in% norm.res.df$sample)) %>%
   mutate(Normalization = factor(Normalization, 
                                 levels = c("Func-meffil", "Func-minfi", "Raw", "Illumina",
-                                           "Noob", "Quantile", "SWAN"))) 
+                                           "Noob", "Quantile", "SWAN", "BMIQ"))) 
 
 
 ## Technical replicates per normalization algorithm ####
@@ -246,15 +249,19 @@ norm_set_list <- lapply(paths, function(x) {
   load(x)
   gset
 })
+load("Esteller.minfiRawNormalization.normalizedRaw.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+norm_set_list$BMIQ <- gset
 norm_set_list$meffil <- INMA_ind[, INMA_ind$Batch == "Esteller"]
 names(norm_set_list) <- gsub("Normalization", "", names(norm_set_list))
 names(norm_set_list)[names(norm_set_list) == "meffil"] <- "Func-meffil"
 names(norm_set_list)[names(norm_set_list) == "Functional"] <- "Func-minfi"
+colData(norm_set_list$BMIQ) <- colData(norm_set_list$SWAN )
 
 norm.res.out <- norm.res.df %>%
   filter(chromosome != 0 & type == "Replicate same batch") %>%
   mutate(rep_quant = sapply(seq_len(nrow(.)), function(i) 
-    getMeanQuantile(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$sample, norm_set_list[[.[i, ]$Normalization]]))) 
+    getMeanQuantile(strsplit(.[i, ]$cpg_ids, ",")[[1]], .[i, ]$sample, norm_set_list[[as.character(.[i, ]$Normalization)]])
+  ) )
 
 ### Sup Figure 6
 tech.norm.plot <- norm.res.out %>%
@@ -280,7 +287,7 @@ tech.norm.plot <- norm.res.out %>%
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 
-png("figures/INMA0.techRep.Norm.png", width = 2800, height = 1000, res = 300)
+png("figures/INMA0.techRep.Norm.png", width = 3000, height = 1000, res = 300)
 tech.norm.plot
 dev.off()
 
@@ -339,7 +346,7 @@ tech.samesamp.norm.plot <- norm.res.df %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms, levels = 7:1),
+  mutate(n_norms = factor(n_norms, levels = 8:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
@@ -364,7 +371,7 @@ tech.samesamp.norm.outlier.plot <- tech.samesamp.norm.quant %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms, levels = 7:1),
+  mutate(n_norms = factor(n_norms, levels = 8:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
@@ -534,6 +541,10 @@ dev.off()
 ## Prepare data ####
 load("results/epimutations/Esteller.epimutations.normalization.residuals.Rdata")
 load("Esteller.allminfiNormalizations.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+load("results/epimutations/Esteller.epimutations.BMIQ.residuals.Rdata")
+load("Esteller.BMIQ.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+
+INMA_norm_resid$BMIQ <- lapply(INMA_norm_resid_BMIQ, function(x) x[, colnames(x) != "delta_beta"])
 
 norm.resid.df <- Reduce(rbind, 
                       lapply(INMA_norm_resid, function(x) {Reduce(rbind, x) %>%
@@ -552,12 +563,15 @@ norm.resid.df <- Reduce(rbind,
   rbind(., mutate(ind.resid.df, Normalization = "Func-meffil")) %>%
   mutate(Normalization = factor(Normalization, 
                                 levels = c("Func-meffil", "Func-minfi", "Raw", "Illumina",
-                                           "Noob", "Quantile", "SWAN"))) %>%
+                                           "Noob", "Quantile", "SWAN", "BMIQ"))) %>%
   filter(Sample_Name %in% unique(ind.resid.df$sample))
 
+
+gset.residuals$BMIQ <- gset.residuals.BMIQ
 gset.residuals$`Func-meffil` <- gset0_res[, gset0_res$Batch == "Esteller"]
 names(gset.residuals) <- gsub("Normalization", "", names(gset.residuals))
 names(gset.residuals)[names(gset.residuals) == "Functional"] <- "Func-minfi"
+colData(gset.residuals$BMIQ) <- colData(gset.residuals$SWAN )
 
 norm.resid.out <- norm.resid.df %>%
   filter(chromosome != 0 & type == "Replicate same batch") %>%
@@ -588,7 +602,7 @@ tech.norm.resid.epi <- rbind(mutate(norm.res.out, QC = "Raw"),
         panel.grid.major=element_blank())
 
 ## Sup Figure 13
-png("figures/INMA0.resid.techRep.Norm.epi.png", width = 2800, height = 2000, res = 300)
+png("figures/INMA0.resid.techRep.Norm.epi.png", width = 2800, height = 2400, res = 300)
 tech.norm.resid.epi
 dev.off()
 
@@ -618,7 +632,7 @@ tech.samesamp.norm.resid.plot <- norm.resid.df %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms, levels = 7:1),
+  mutate(n_norms = factor(n_norms, levels = 8:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +
@@ -643,7 +657,7 @@ tech.samesamp.norm.resid.outlier.plot <- tech.samesamp.norm.resid.quant %>%
   count(method, n_norms) %>% 
   complete(method, n_norms, fill = list(n = 0)) %>% 
   group_by(method) %>%
-  mutate(n_norms = factor(n_norms, levels = 7:1),
+  mutate(n_norms = factor(n_norms, levels = 8:1),
          prop = n/sum(n)*100) %>%
   ggplot(aes(x = method, y = prop, color = n_norms, fill = n_norms)) +
   geom_bar(stat = "identity") +

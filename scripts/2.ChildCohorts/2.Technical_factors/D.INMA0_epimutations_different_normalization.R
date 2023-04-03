@@ -39,14 +39,14 @@ INMA_norm <- lapply(paths, runEpimutations)
 names(INMA_norm) <- gsub(".normalizedComBat.*$", "", gsub("Esteller.minfi", "", paths))
 save(INMA_norm, file = "results/epimutations/Esteller.epimutations.normalization.Rdata")
 
-params2 <- epi_parameters()
-params2$manova$pvalue_cutoff <- 0.4
-params2$mlm$pvalue_cutoff <- 0.4
-params2$isoforest$outlier_score_cutoff <- 0.65
-params2$quantile$offset_abs <- 0.1
-params2$beta$pvalue_cutoff <- 1e-5
-INMA_norm_lib <- lapply(paths, runEpimutations, params = params2)
-save(INMA_norm_lib, file = "results/epimutations/Esteller.epimutations.normalization.liberal.Rdata")
+## BMIQ
+library(ExperimentHub)
+eh <- ExperimentHub()
+candRegsGR <- eh[["EH6692"]]
+
+INMA_norm_BMIQ <- runEpimutations("Esteller.minfiRawNormalization.normalizedRaw.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+save(INMA_norm_BMIQ, file = "results/epimutations/Esteller.epimutations.normalizationBMIQ.Rdata")
+
 
 
 getResiduals <- function(gset){
@@ -80,11 +80,18 @@ gset.residuals <- lapply(paths, function(x){
 names(gset.residuals) <- names(paths)
 save(gset.residuals, file = "Esteller.allminfiNormalizations.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
 
+
 INMA_norm_resid <- lapply(gset.residuals, runEpimutationsSet)
 save(INMA_norm_resid, file = "results/epimutations/Esteller.epimutations.normalization.residuals.Rdata")
 
-INMA_norm_resid_lib <- lapply(gset.residuals, runEpimutationsSet, params2)
-save(INMA_norm_resid_lib, file = "results/epimutations/Esteller.epimutations.normalization.residuals.liberal.Rdata")
+## BMIQ
+load("Esteller.minfiRawNormalization.normalizedRaw.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+gset.residuals.BMIQ <- getResiduals(gset)
+save(gset.residuals.BMIQ, file = "Esteller.BMIQ.residuals.autosomic.filterAnnotatedProbes.withNA.GenomicRatioSet.Rdata")
+
+INMA_norm_resid_BMIQ <- runEpimutationsSet(gset.residuals.BMIQ)
+save(INMA_norm_resid_BMIQ, file = "results/epimutations/Esteller.epimutations.BMIQ.residuals.Rdata")
+
 
 
 ## Rerun execution with error

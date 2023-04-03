@@ -110,14 +110,12 @@ getValues <- function(res, epi_regs, all_ranges){
   all_neg <- all_ranges[all_ranges %outside% epi_regs]
   
   if(length(res) == 0){
-    return(  c(TPu = 0,
-               TPn = 0, 
+    return(  c(TP = 0,
                FP = 0, 
                TN = length(all_neg),
-               FNu = length(unique_reg), 
-               FNn = length(nonunique_reg)
+               FN = length(epi_regs))
             
-    ) )
+    ) 
   } else {
   c(TP = sum(sapply(unique(res$sample), function(x) sum(subset(res, sample == x) %over% subset(epi_regs, sample == x)))), 
     FP = sum(res %outside% epi_regs),
@@ -170,36 +168,35 @@ dev.off()
 ## Simulate data a general dataset with only unique epimutations and subset ####
 set.seed(27)
 Nsamp <- seq(20, 90, 10)
-sim_sample_res <- lapply(Nsamp, function(N){
+sim_sample_res <- parallel::mclapply(Nsamp, function(N){
   
-  samps <- sample(colnames(mcols(sim.data040)), N)
-  epimut_samp <- lapply(names(epi_parameters()), function(met){
-    epimutations_one_leave_out(simGset040[, samps], method = met)
-  })
-  names(epimut_samp) <- names(epi_parameters())
+    samps <- sample(colnames(mcols(sim.data040)), N)
+    epimut_samp <- lapply(names(epi_parameters()), function(met){
+      epimutations_one_leave_out(simGset040[, samps], method = met)
+    })
+    names(epimut_samp) <- names(epi_parameters())
+    
+    epimut_sampGR <- lapply(epimut_samp, function(x) {
+      GR <- makeGRangesFromDataFrame(x, keep.extra.columns = TRUE)
+      GR[seqnames(GR) != 0]
+    })
+    
+
+    ramr_samp <- lapply(c("IQR", "beta", "wbeta"), function(met){
+      subsamp <- sim.data040[, samps]
+      getAMR(subsamp, ramr.method = met, min.cpgs = 3,
+             merge.window = 1000, cores = 2, qval.cutoff = 1e-3)
+    })
+    names(ramr_samp) <- c("IQR", "rmar-beta", "wbeta")
+    
+    list(samples = samps, results = c(epimut_sampGR, ramr_samp))
   
-  epimut_sampGR <- lapply(epimut_samp, function(x) {
-    GR <- makeGRangesFromDataFrame(x, keep.extra.columns = TRUE)
-    GR[seqnames(GR) != 0]
-  })
-  
-  
-  ramr_samp <- lapply(c("IQR", "beta", "wbeta"), function(met){
-    subsamp <- sim.data040[, samps]
-    getAMR(subsamp, ramr.method = met, min.cpgs = 3,
-           merge.window = 1000, cores = 2, qval.cutoff = 1e-3)
-  })
-  names(ramr_samp) <- c("IQR", "rmar-beta", "wbeta")
-  
-  list(samples = samps, results = c(epimut_sampGR, ramr_samp))
-  
-})
+}, mc.cores = 8)
 save(sim_sample_res, file = "results/simulations/sim_res_samplesize.Rdata")
 
 
 ## Create tables
-sim_sample_tabs <- lapply(sim_sample_res, function(nsampL){
-  lapply(nsampL, function(iterL){
+sim_sample_tabs <- lapply(sim_sample_res, function(iterL){
     regs <- subset(amrs.unique_040, sample %in% iterL$samples)
     names(iterL$res)[7:9] <- c("ramr-IQR", "ramr-beta", "ramr-wbeta")
     vals <- sapply(iterL$res, getValues, epi_regs = regs,
@@ -208,53 +205,30 @@ sim_sample_tabs <- lapply(sim_sample_res, function(nsampL){
     t(vals) %>% 
       data.frame() %>%
       mutate(Method = rownames(.)) %>%
-      mutate(ACC = (TPu + TN) / (TPu + TN + FP + FNu),
-             SP = TN / (FP + TN),
-             TPR = TPu / (TPu + FNu), 
-             FDR = FP / (TPu + FP)) %>%
+      mutate(TPR = TP / (TP + FN), 
+             FDR = FP / (TP + FP)) %>%
       as_tibble()
-  })
 })
-sim_sample_tabs_N <- lapply(sim_sample_tabs, Reduce, f = rbind)
-sim_sample_tabs_df <- Reduce(rbind, sim_sample_tabs_N) %>%
-  mutate(N = rep(Nsamp, sapply(sim_sample_tabs_N, nrow)))
+sim_sample_tabs_N <- Reduce(rbind, sim_sample_tabs) %>%
+  mutate(N = rep(Nsamp, sapply(sim_sample_tabs, nrow)))
 
 ## epimutations
 
-sample_size_plot_epi <- sim_sample_tabs_df %>%
-  filter(Method %in% c("beta", "quantile", "mahdist", "mlm", "iForest", "manova")) %>%
+sample_size_plot <- sim_sample_tabs_N %>%
   select(Method, TPR, FDR, N) %>%
   gather(Measure, Value, 2:3) %>%
-  mutate(Measure = factor(Measure, levels = c("TPR", "FDR"))) %>%
+  mutate(Measure = factor(Measure, levels = c("TPR", "FDR")),
+         Method = factor(Method, levels = c("quantile", "beta", "manova", "mlm", "iForest", "mahdist", "ramr-IQR", "ramr-beta", "ramr-wbeta"))) %>%
   ggplot(aes(x = N, y = Value, color = Method)) +
+  scale_color_manual(values = c("#E69F00", "#F0E442","cyan", "deepskyblue2", "deepskyblue4", "blue", "grey10", "grey50", "grey80")) +
   geom_point() +
-  geom_smooth(span = 0.5) +
+  geom_line() +
   theme_bw() +
   facet_grid(~ Measure)
 
-
-sample_size_plot_ramr <- sim_sample_tabs_df %>%
-  filter(Method %in% c("ramr-beta", "ramr-IQR", "ramr-wbeta")) %>%
-  select(Method, TPR, FDR, N) %>%
-  gather(Measure, Value, 2:3) %>%
-  mutate(Measure = factor(Measure, levels = c("TPR", "FDR"))) %>%
-  ggplot(aes(x = N, y = Value, color = Method)) +
-  geom_point() +
-  geom_smooth(span = 0.5) +
-  theme_bw() +
-  facet_grid(~ Measure)
-
-plot_grid(sample_size_plot_epi, sample_size_plot_ramr, nrow = 2)
-
-
-sim_sample_tabs_df %>%
-  mutate(TPR = SN) %>%
-  select(Method, TPR, FDR, N) %>%
-  gather(Measure, Value, 2:3) %>%
-  group_by(Method, Measure, N) %>%
-  summarize(m = median(Value)) %>%
-  spread(N, m) %>% 
-  data.frame()
+png("figures/simulations_samplesize.png", res = 300, width = 2500, height = 1000)
+sample_size_plot 
+dev.off()
 
 
 
