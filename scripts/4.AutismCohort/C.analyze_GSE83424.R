@@ -20,6 +20,10 @@ load("results/preprocess/GSE83424/GSE83424.normalizedComBat.autosomic.filterAnno
 load("results/epimutations/GSE83424.epimutations.allSamples.residuals.Rdata")
 load("results/epimutations/GSE83424.epimutations.casecontrol.residuals.Rdata")
 
+## Imprinted regions
+imp_regions <- read_delim("data/Imprinted_regions.txt")
+imp_regionsGR <- makeGRangesFromDataFrame(imp_regions, end.field = "Finish")
+seqlevelsStyle(imp_regionsGR) <- "UCSC"
 
 ## Add region annotation ####
 addAnnotation <- function(rst){
@@ -73,6 +77,12 @@ gse83424.cc.df <- gse83424.residuals.cc %>%
                 data.frame() %>%
                 dplyr::select(status, title, geo_accession) %>%
                 mutate(sample = geo_accession))
+gse83424.cc.GR <- makeGRangesFromDataFrame(gse83424.cc.df, keep.extra.columns = TRUE)
+imp_overlaps <- findOverlaps(gse83424.cc.GR, imp_regionsGR)
+gse83424.cc.df$imprinted <- "No"
+gse83424.cc.df$imprinted[from(imp_overlaps)] <- "Imprinted"
+
+
 
 gse83424.cc.sum <- gse83424.cc.df %>%
     group_by(sample, status) %>%
@@ -274,8 +284,6 @@ plot_epimutations_group <- function(dmr, epi_samples, methy, genome = "hg19", ge
 
 
     #Melt beta values, mean and sd object (necessary for the ggplot)
-
-
     if (requireNamespace("reshape2", quietly = TRUE)){
     beta_values <- reshape2::melt(df, id = c("seqnames",
                                              "start",
@@ -380,18 +388,9 @@ plot_epimutations_group <- function(dmr, epi_samples, methy, genome = "hg19", ge
                         ggplot2::aes(x = start, y = mean),
                         show.legend = TRUE)
 
-  if (requireNamespace("ggrepel", quietly = TRUE)) {
-    plot_cpg_names <- plot_mean +
-      ggrepel::geom_text_repel() +
-      ggplot2::annotate(geom = "text",
-                        x = names$start,
-                        y = names$value + 0.05,
-                        label = names$id,
+   plot_cpg_names <- plot_mean +
+      geom_text_repel(data = names, aes(x = start, y = value + 0.05, label = id),
                         color = "black")
-  } else {
-    stop("'ggrepel' package not avaibale")
-  }
-
 
   plot <- plot_cpg_names +
     ggplot2::lims(y = c(0,1)) +
@@ -410,7 +409,7 @@ plot_epimutations_group <- function(dmr, epi_samples, methy, genome = "hg19", ge
 # BRSK2 y mucho ruido - autism db
 reg1 <- filter(gse83424.cc.df, epi_region_id == "chr11_1463541")
 prior.epi1 <- plot_epimutations_group(reg1, reg1$sample, gset) + ggtitle("BRSK2")  +
-                  scale_color_manual(name = "Status", values =  c("black",  "darkblue", "firebrick",
+                  scale_color_manual(name = "Status", values =  c("black",  "cyan", "firebrick",
                                                 "hotpink", "blueviolet", "lightpink",
                                                 "purple", "lavender"),
                                      breaks = c("Control", "mean", "Case", filter(gse83424.cc.df, epi_region_id == "chr11_1463541")$sample),
@@ -420,7 +419,7 @@ prior.epi1 <- plot_epimutations_group(reg1, reg1$sample, gset) + ggtitle("BRSK2"
 ## Gene NUP20L PMID: 30970224
 reg2 <- filter(gse83424.cc.df, epi_region_id == "chr1_154127138")
 prior.epi2 <- plot_epimutations_group(reg2[2, ], reg2$sample, gset) + ggtitle("NUP20L TSS")  +
-                  scale_color_manual(name = "Status", values =  c("black",  "darkblue", "firebrick",
+                  scale_color_manual(name = "Status", values =  c("black",  "cyan", "firebrick",
                                                 "hotpink", "blueviolet", "lightpink",
                                                 "purple", "lavender"),
                                      breaks = c("Control", "mean", "Case", reg2$sample),
@@ -430,7 +429,7 @@ prior.epi2 <- plot_epimutations_group(reg2[2, ], reg2$sample, gset) + ggtitle("N
 ## ZCCHC9  - reported in Aida paper
 reg3 <- filter(gse83424.cc.df, epi_region_id == "chr5_80594700")
 prior.epi3 <- plot_epimutations_group(reg3, reg3$sample, gset) + ggtitle("ZCCHC9 TSS")  +
-                  scale_color_manual(name = "Status", values =  c("black",  "darkblue", "firebrick",
+                  scale_color_manual(name = "Status", values =  c("black",  "cyan", "firebrick",
                                                 "hotpink", "blueviolet", "lightpink",
                                                 "purple", "lavender"),
                                      breaks = c("Control", "mean", "Case", reg3$sample),
@@ -440,17 +439,22 @@ prior.epi3 <- plot_epimutations_group(reg3, reg3$sample, gset) + ggtitle("ZCCHC9
 ## Replicada Aida
 reg4 <- filter(gse83424.cc.df, epi_region_id == "chr6_13274151")
 prior.epi4 <- plot_epimutations_group(reg4, reg4$sample, gset) + ggtitle("PHACTR1")  +
-                  scale_color_manual(name = "Status", values =  c("black",  "darkblue", "firebrick",
+                  scale_color_manual(name = "Status", values =  c("black",  "cyan", "firebrick",
                                                 "hotpink", "blueviolet", "lightpink",
                                                 "purple", "lavender"),
                                      breaks = c("Control", "mean", "Case", reg4$sample),
                                      labels = c("Control", "Control mean", "Case", reg4$title)) +
                   xlim(c(min(reg4$start) - 20, max(reg4$end) + 20))
 
-## Sup Figure 29
-png("figures/GSE83424.priorEpimutations.png", width = 3200, height = 2400, res = 300)
-plot_grid(prior.epi1, prior.epi2, prior.epi3, prior.epi4, ncol = 2, labels = LETTERS[1:4])
-dev.off()
+
+reg_imp <- filter(gse83424.cc.df, epi_region_id == "chr20_30134188")
+prior.epi_imp <- plot_epimutations_group(reg_imp, reg_imp$sample, gset) + ggtitle("HM13")  +
+                  scale_color_manual(name = "Status", values =  c("black",  "cyan", "firebrick",
+                                                "hotpink", "blueviolet", "lightpink",
+                                                "purple", "lavender"),
+                                     breaks = c("Control", "mean", "Case", reg_imp$sample),
+                                     labels = c("Control", "Control mean", "Case", reg_imp$title)) +
+                  xlim(c(min(reg_imp$start) - 20, max(reg_imp$end) + 20))
 
 gse83424.cc.out.df <- select(gse83424.cc.reg.df, epi_region_id, title, chromosome, start, end, sz, cpg_n,
   cpg_ids, delta_beta)
@@ -490,10 +494,10 @@ disease.burden <- gse83424.loo.sum %>%
   scale_color_discrete(name = "Epimutations per sample") +
   scale_fill_discrete(name = "Epimutations per sample")
 
-## Sup Figure 30
-png("figures/GSE83424.diseaseburden.png", width = 2000, height = 1200, res = 300)
-disease.burden
-dev.off()
+
+## Figure 6
+grid <- plot_grid(prior.epi1, prior.epi2, prior.epi3, prior.epi4, prior.epi_imp, disease.burden, ncol = 2, labels = LETTERS[1:6])
+ggsave(file = "figures/GSE83424.panel.eps", plot = grid, width = 6400, height = 7200, dpi = 600, units = "px")
 
 ### Recurrent epimutations - for comparison with case-control ####
 recur.disease.epi.loo <- gse83424.loo.df %>%

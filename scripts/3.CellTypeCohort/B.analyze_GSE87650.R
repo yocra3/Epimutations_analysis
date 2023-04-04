@@ -261,6 +261,8 @@ rep.plot <- res.gse87650.cell.loo.rep %>%
   ggtitle("Epimutations replicability") +
   scale_fill_manual(name = "", values = c("pink", "darkolivegreen", "turquoise4", "brown", "grey80", "grey50", "grey20"))
 
+save(rep.plot, file = "results/GSE87650.replicability_plot.Rdata")
+
 ## Figure 7
 png("figures/GSE87650.replicateEpis.cells.png", width = 2400, height = 1400, res = 300)
 rep.plot
