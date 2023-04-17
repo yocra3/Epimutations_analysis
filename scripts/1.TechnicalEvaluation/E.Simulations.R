@@ -412,35 +412,59 @@ dev.off()
 install.packages("bench")
 library(bench)
 
-# ramr_testsmem <- lapply(c("IQR", "beta", "wbeta"), function(x) {
-#   bquote( getAMR(sim.data040[, 1:10], ramr.method = .(x), min.cpgs = 3,
-#                  qval.cutoff = 1e-3,
-#                  merge.window = 1000, cores = 1))
-# })
-# names(ramr_testsmem) <- paste0("ramr-", c("IQR", "beta", "wbeta"))
-# 
-# cc_testsmem <- lapply(names(epi_parameters()), function(met){
-#   bquote(epimutations(simGset040[, 1:10], sim.data_ctrlGRS[, 1:10], method = .(met)))
-# })
-# names(cc_testsmem) <- paste("cc", names(epi_parameters()))
-# 
-# loo_testsmem <- lapply(names(epi_parameters()), function(met){
-#   bquote(epimutations_one_leave_out(simGset040[, 1:10], method = .(met)))
-# })
-# names(loo_testsmem) <- paste("loo", names(epi_parameters()))
-
-
-mem_ramr <- mark(exprs = c(ramr_tests, cc_tests, loo_tests), 
+mem_ramr <- mark(exprs = ramr_tests, 
                  iterations = 1, check = FALSE, filter_gc = FALSE)
 save(mem_ramr, file = "results/simulations/sim_res_mem_ramr.Rdata")
 
-mem_cc <- mark(exprs = cc_tests, 
-                 iterations = 1, check = FALSE, filter_gc = FALSE)
+mem_cc <- mark(exprs = cc_tests,
+               iterations = 1, check = FALSE, filter_gc = FALSE)
 save(mem_cc, file = "results/simulations/sim_res_mem_cc.Rdata")
 
-mem_loo <- mark(exprs = loo_tests, 
-                 iterations = 1, check = FALSE, filter_gc = FALSE)
-save(mem_loo, file = "results/simulations/sim_res_mem_loo.Rdata")
+lapply(names(epi_parameters()), function(met){
+  mem_res <- mark(exprs = loo_tests[paste("loo", met)], 
+       iterations = 1, check = FALSE, filter_gc = FALSE)
+  save(mem_res, file = paste0("results/simulations/sim_res_mem_loo", met, ".Rdata"))
+})
 
- 
+## Manually do quantile 
+f <- tempfile()
+utils::Rprofmem(f, threshold = 1)
+eval(loo_tests[["loo quantile"]])
+utils::Rprofmem(NULL)
+cot <- read_table(f, col_names = FALSE, col_types = cols_only(X1 = col_double()))
+save(cot, file= "results/simulations/sim_res_mem_loo_quantile_df.Rdata")
 
+
+## Make plot
+load("results/simulations/sim_res_mem_cc.Rdata")
+load("results/simulations/sim_res_mem_ramr.Rdata")
+
+mem_res_loo <- lapply(c("manova", "mlm", "iForest", "mahdist", "beta"), function(met){
+  load(file = paste0("results/simulations/sim_res_mem_loo", met, ".Rdata"))
+  mem_res
+})
+load("results/simulations/sim_res_mem_loo_quantile_df.Rdata")
+
+mem_df <- data.frame(names = as.character(names(
+  c(mem_ramr$expression, mem_cc$expression, sapply(mem_res_loo, function(x) x$expression), "loo quantile" = "a"))),
+                     memory = c(mem_ramr$mem_alloc, mem_cc$mem_alloc, sapply(mem_res_loo, function(x) x$mem_alloc), sum(cot$X1, na.rm = TRUE))/(1024^3))
+
+
+plot_mem <- mem_df %>%
+  mutate(Method = recode(names, IQR = "ramr-IQR" , beta = "ramr-beta", wbeta = "ramr-wbeta"), 
+         Package = ifelse(grepl("ramr", Method), "ramr", "epimutacions"),
+         Mode = ifelse(grepl("cc", Method), "Case-Control", "LOO"),
+         Method = gsub("cc ", "", Method),
+         Method = gsub("loo ", "", Method),
+         Method = factor(Method, levels = c("quantile", "beta", "manova", "mlm", "iForest", "mahdist", "ramr-IQR", "ramr-beta", "ramr-wbeta"))) %>%
+  ggplot(aes(x = Method, y = memory, fill = Method)) +
+  geom_bar(stat = "identity") +
+  ylab("Max memory (Gb)") +
+  scale_fill_manual(values = c("#E69F00", "#F0E442","cyan", "deepskyblue2", "deepskyblue4", "blue", "grey10", "grey50", "grey90")) +
+  facet_grid(~ Package + Mode, scales = "free_x", space = "free_x") +
+  theme_bw() +
+  theme(axis.text.x  = element_text(angle = 90, vjust = 0.5))
+
+png("figures/simulations_memory.png", res = 300, width = 2500, height = 1000)
+plot_mem 
+dev.off()
