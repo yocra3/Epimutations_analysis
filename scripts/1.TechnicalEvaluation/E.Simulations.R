@@ -91,6 +91,62 @@ ramr_res040 <- lapply(c("IQR", "beta", "wbeta"), function(met){
 names(ramr_res040) <- names(ramr_res020) <- c("ramr-IQR", "ramr-beta", "ramr-wbeta")
 save(ramr_res020, ramr_res040, file = "results/simulations/sim_ramr_res.Rdata")
 
+## Run DMR methods
+library(ChAMP)
+
+simGset020$sample <- colnames(simGset020)
+simGset040$sample <- colnames(simGset040)
+
+runProbeLasso <- function(gset, samp){
+  dup <- duplicateSample(gset, samp)
+  
+  epi <- champ.DMR(getBeta(dup), pheno = factor(ifelse(dup$sample == samp, "samp", "rest")),
+                    method = "ProbeLasso", minDmrSep = 1000, meanLassoRadius = 1000,
+                    minProbes = 3, Rplot = FALSE, PDFplot = FALSE)
+  
+}
+
+duplicateSample <- function(gset, samp){
+  
+  cbind(gset, gset[, gset$sample == samp])
+  
+}
+
+probelasso_res020 <- lapply(simGset020$sample, runProbeLasso, gset = simGset020)
+probelasso_res040 <- lapply(simGset040$sample, runProbeLasso, gset = simGset040)
+save(probelasso_res020, probelasso_res040, file = "results/simulations/sim_probelasso_res.Rdata")
+
+library(DMRcate)
+
+runDMRcate <- function(gset, samp){
+  
+  design <- model.matrix(~sample == samp, colData(gset))
+  myannotation <- cpg.annotate("array", gset, arraytype = "450K",
+                               analysis.type = "differential", design = design, coef = 2)
+  
+  epis <- dmrcate(myannotation,  lambda = 1000, min.cpgs = 3)
+  extractRanges(epis)
+}
+dmrcate_res020 <- lapply(simGset020$sample, runDMRcate, gset = simGset020)
+dmrcate_res040 <- lapply(simGset040$sample, runDMRcate, gset = simGset040)
+save(dmrcate_res020, dmrcate_res040, file = "results/simulations/sim_dmrcate_res.Rdata")
+
+
+runBumphunter <- function(gset, samp){
+  epi <- champ.DMR(getBeta(gset), pheno = factor(ifelse(gset$sample == samp, "samp", "rest")),
+                   method = "Bumphunter", minProbes = 3, cores = 10,
+                   cutoff = 0.1,
+                   maxGap = 1000, nullMethod = "bootstrap", B = 100
+                   
+  )
+  
+}
+bumphunter_res020 <- lapply(simGset020$sample[1:10], runBumphunter, gset = simGset020)
+save(bumphunter_res020, file = "results/simulations/sim_bumphunter_res.Rdata")
+
+bumphunter_res040 <- lapply(simGset040$sample, runBumphunter, gset = simGset040)
+save(bumphunter_res020, bumphunter_res040, file = "results/simulations/sim_bumphunter_res.Rdata")
+
 ## Evaluate ####
 all.ranges <- getUniverse(sim.data020, min.cpgs = 3, merge.window = 1000)
 
