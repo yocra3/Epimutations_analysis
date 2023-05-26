@@ -91,7 +91,8 @@ ramr_res040 <- lapply(c("IQR", "beta", "wbeta"), function(met){
 names(ramr_res040) <- names(ramr_res020) <- c("ramr-IQR", "ramr-beta", "ramr-wbeta")
 save(ramr_res020, ramr_res040, file = "results/simulations/sim_ramr_res.Rdata")
 
-## Run DMR methods
+## Run DMR methods ####
+#### ProbeLasso ####
 library(ChAMP)
 
 simGset020$sample <- colnames(simGset020)
@@ -116,6 +117,7 @@ probelasso_res020 <- lapply(simGset020$sample, runProbeLasso, gset = simGset020)
 probelasso_res040 <- lapply(simGset040$sample, runProbeLasso, gset = simGset040)
 save(probelasso_res020, probelasso_res040, file = "results/simulations/sim_probelasso_res.Rdata")
 
+#### DMRcate ####
 library(DMRcate)
 
 runDMRcate <- function(gset, samp){
@@ -131,7 +133,7 @@ dmrcate_res020 <- lapply(simGset020$sample, runDMRcate, gset = simGset020)
 dmrcate_res040 <- lapply(simGset040$sample, runDMRcate, gset = simGset040)
 save(dmrcate_res020, dmrcate_res040, file = "results/simulations/sim_dmrcate_res.Rdata")
 
-
+#### Bumphunter ####
 runBumphunter <- function(gset, samp){
   epi <- champ.DMR(getBeta(gset), pheno = factor(ifelse(gset$sample == samp, "samp", "rest")),
                    method = "Bumphunter", minProbes = 3, cores = 10,
@@ -141,11 +143,27 @@ runBumphunter <- function(gset, samp){
   )
   
 }
-bumphunter_res020 <- lapply(simGset020$sample[1:10], runBumphunter, gset = simGset020)
+bumphunter_res020 <- lapply(simGset020$sample, runBumphunter, gset = simGset020)
 save(bumphunter_res020, file = "results/simulations/sim_bumphunter_res.Rdata")
 
 bumphunter_res040 <- lapply(simGset040$sample, runBumphunter, gset = simGset040)
 save(bumphunter_res020, bumphunter_res040, file = "results/simulations/sim_bumphunter_res.Rdata")
+
+#### limma + combp ####
+library(limma)
+
+cpg_annot <- rowRanges(simGset020) %>% as.data.frame() %>%
+  dplyr::select(-width, -strand)
+
+mod <- model.matrix(~ sample == "sample1", colData(simGset020))
+fit <- eBayes(lmFit(getBeta(simGset020), mod))
+lmtab <- topTable(fit, coef = 2, n = Inf)
+tab <- cbind(cpg_annot, lmtab[rownames(cpg_annot), ]$P.Value)
+write.table(tab, file = "results/simulations/limma_combp/sample1.bed")
+
+system("comb-p pipeline --dist 1000 -p results/simulations/limma_combp/sample1.out results/simulations/limma_combp/sample1.bed")
+
+
 
 ## Evaluate ####
 all.ranges <- getUniverse(sim.data020, min.cpgs = 3, merge.window = 1000)
