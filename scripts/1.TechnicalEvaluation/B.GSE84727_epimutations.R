@@ -33,7 +33,7 @@ mcols(data.ranges) <- data.betas
 
 res.GSE84727.ramr.list <- lapply(c("IQR", "beta", "wbeta"), function(met){
   getAMR(data.ranges, ramr.method = met, min.cpgs = 3,
-         qval.cutoff = 1e-3,
+         qval.cutoff = ifelse(met == "beta", 1e-3, 1e-6), iqr.cutoff = 3,
          merge.window = 1000, cores = 10)
 })
 save(res.GSE84727.ramr.list, file = "results/epimutations/GSE84727.epimutations.allSamples.ramr.Rdata")
