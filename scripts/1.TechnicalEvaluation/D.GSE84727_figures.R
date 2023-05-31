@@ -190,7 +190,8 @@ p_samp_dist <- GSE84727.comb %>%
   theme_bw() +
   ylab("N samples") +
   ggtitle("epimutacions") +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "none")
 
 png("figures/GSE84727_epimut_samp_dist_stacked.png", width = 800, height = 400)
 p_samp_dist
@@ -280,11 +281,11 @@ GSE84727.epi2$epi_region_id[S4Vectors::from(over)] <- names(candRegsGR[S4Vectors
 GSE84727.epi2$reg_id <- paste(GSE84727.epi2$sample , GSE84727.epi2$epi_region_id )
 methods <- levels(GSE84727.epi2$method)
 names(methods) <- methods
-upset.list2 <- lapply(methods[c("quantile-R", "beta", "mlm", "ramr-beta", "ramr-IQR")], 
+upset.list2 <- lapply(methods[c("quantile-R", "beta", "mlm", "ramr-beta", "ramr-IQR", "ramr-wbeta")], 
                      function(x) subset(GSE84727.epi2, method == x)$reg_id)
 
 png("figures/GSE84727_epimut_method_overlaps.png", width = 1000, height = 700)
-upset2 <- upset(fromList(upset.list2), sets = c("quantile-R", "beta", "mlm", "ramr-beta", "ramr-IQR"),
+upset2 <- upset(fromList(upset.list2), sets = c("quantile-R", "beta", "mlm", "ramr-beta", "ramr-IQR", "ramr-wbeta"),
       order.by = "freq", nintersects  = 11,
       mainbar.y.label = "", 
       sets.x.label = "N Epimutations") 
@@ -299,9 +300,8 @@ upset2_cw <- cowplot::plot_grid(NULL, upset2$Main_bar, upset2$Sizes, upset2$Matr
                            rel_widths = c(2,3))
 
 grid <- plot_grid(p_samp_dist, p_samp_dist_ramr, upset1_cw, upset2_cw, 
-          ncol = 2, rel_heights = c(2, 3), rel_widths = c(1.15, 1), 
+          ncol = 2, rel_heights = c(2, 3), rel_widths = c(1, 1.15), 
           labels = c("A", "C", "B", "D"))
 ggsave("figures/GSE84727_epimut_method_panel.eps", width = 8000, height = 4000, dpi = 600, units = "px")
 
-dev.off()
 
