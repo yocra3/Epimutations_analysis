@@ -573,7 +573,7 @@ processIter <- function(iter, sim){
 nonunique_sim_ramr_l <- Map(processIter, nonunique_sim_ramr, nonunique_sim)
 nonunique_sim_ramr_df <- Reduce(rbind, nonunique_sim_ramr_l) %>%
   mutate(N = rep(2:10, sapply(nonunique_sim_ramr_l, nrow)),
-         Mode = "LOO",
+         Mode = "One-Against-Others",
          Package = "ramr")
 
 
@@ -602,7 +602,7 @@ nonunique_sim_cc_df <- Reduce(rbind, nonunique_sim_cc_l) %>%
 nonunique_sim_loo_l <- Map(processIterEpimut, nonunique_sim_loo, nonunique_sim)
 nonunique_sim_loo_df <- Reduce(rbind, nonunique_sim_loo_l) %>%
   mutate(N = rep(2:10, sapply(nonunique_sim_loo_l, nrow)),
-         Mode = "LOO",
+         Mode = "One-Against-Others",
          Package = "epimutacions")
 
 nonunique_df <- rbind(nonunique_sim_ramr_df, nonunique_sim_cc_df, nonunique_sim_loo_df) %>%
@@ -663,7 +663,7 @@ save(time_report, file = "results/simulations/sim_res_time.Rdata")
 plot_time <- data.frame(time_report) %>%
   mutate(Method = recode(expr, IQR = "ramr-IQR" , beta = "ramr-beta", wbeta = "ramr-wbeta"), 
          Package = ifelse(grepl("ramr", Method), "ramr", "epimutacions"),
-         Mode = ifelse(grepl("cc", Method), "Case-Control", "LOO"),
+         Mode = ifelse(grepl("cc", Method), "Case-Control", "One-Against-Others"),
          Method = gsub("cc ", "", Method),
          Method = gsub("loo ", "", Method),
          Method = factor(Method, levels = c("quantile", "beta", "manova", "mlm", "iForest", "mahdist", "ramr-IQR", "ramr-beta", "ramr-wbeta"))) %>%
@@ -725,7 +725,7 @@ mem_df <- data.frame(names = as.character(names(
 plot_mem <- mem_df %>%
   mutate(Method = recode(names, IQR = "ramr-IQR" , beta = "ramr-beta", wbeta = "ramr-wbeta"), 
          Package = ifelse(grepl("ramr", Method), "ramr", "epimutacions"),
-         Mode = ifelse(grepl("cc", Method), "Case-Control", "LOO"),
+         Mode = ifelse(grepl("cc", Method), "Case-Control", "One-Against-Others"),
          Method = gsub("cc ", "", Method),
          Method = gsub("loo ", "", Method),
          Method = factor(Method, levels = c("quantile", "beta", "manova", "mlm", "iForest", "mahdist", "ramr-IQR", "ramr-beta", "ramr-wbeta"))) %>%
